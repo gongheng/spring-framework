@@ -233,10 +233,56 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 		return null;
 	}
 
+	/**
+	 * 【获取早期Bean引用的关键方法】解决循环依赖中的AOP代理问题
+	 *
+	 * <h3>方法的调用时机：</h3>
+	 * <ul>
+	 * <li>在Bean实例化后、属性注入前被调用</li>
+	 * <li>通过三级缓存机制暴露早期引用</li>
+	 * <li>用于解决AOP代理对象的循环依赖问题</li>
+	 * </ul>
+	 *
+	 * <h3>循环依赖场景下的AOP代理：</h3>
+	 * <pre>
+	 * 场景：Bean A依赖Bean B，Bean B依赖Bean A，且都需要AOP代理
+	 *
+	 * 1. 创建A，实例化后调用getEarlyBeanReference()
+	 * 2. 在这里提前为A创建AOP代理（如果需要的话）
+	 * 3. 将A的代理对象放入二级缓存
+	 * 4. B注入A时获取的是A的代理对象
+	 * 5. 避免了注入原始对象后再创建代理的问题
+	 * </pre>
+	 *
+	 * <h3>缓存机制：</h3>
+	 * <ul>
+	 * <li><b>earlyBeanReferences</b>: 缓存早期Bean引用，避免重复代理</li>
+	 * <li><b>cacheKey</b>: 基于beanClass和beanName生成缓存键</li>
+	 * <li><b>wrapIfNecessary</b>: 核心代理创建逻辑</li>
+	 * </ul>
+	 *
+	 * <h3>与postProcessAfterInitialization的区别：</h3>
+	 * <ul>
+	 * <li><b>getEarlyBeanReference</b>: 提前创建代理（循环依赖场景）</li>
+	 * <li><b>postProcessAfterInitialization</b>: 正常创建代理（初始化完成后）</li>
+	 * <li><b>协调</b>: 确保两次创建的代理对象一致</li>
+	 * </ul>
+	 *
+	 * @param bean 当前Bean实例（可能已经是代理对象）
+	 * @param beanName Bean的名称
+	 * @return 可能是原始Bean或提前创建的AOP代理对象
+	 */
 	@Override
 	public Object getEarlyBeanReference(Object bean, String beanName) {
+		// 【生成缓存键】基于beanClass和beanName
 		Object cacheKey = getCacheKey(bean.getClass(), beanName);
+
+		// 【缓存早期Bean引用】记录原始Bean引用，用于后续检查
+		// 这是为了确保在正常初始化阶段不会重复创建代理
 		this.earlyBeanReferences.put(cacheKey, bean);
+
+		// 【提前创建代理】如果需要的话，在这里提前创建AOP代理
+		// 这样在循环依赖中，其他Bean引用的就是代理对象而不是原始对象
 		return wrapIfNecessary(bean, beanName, cacheKey);
 	}
 
@@ -318,21 +364,65 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	 * @param cacheKey the cache key for metadata access
 	 * @return a proxy wrapping the bean, or the raw bean instance as-is
 	 */
+	/**
+	 * 【AOP代理包装的核心方法】判断是否需要为Bean创建AOP代理
+	 *
+	 * <h3>方法执行流程：</h3>
+	 * <pre>
+	 * 1. 检查是否已经处理过该Bean（避免重复代理）
+	 * 2. 检查是否是基础设置类（Advice、Advisor等不需要代理）
+	 * 3. 获取适用于当前Bean的拦截器
+	 * 4. 如果有拦截器，创建代理对象
+	 * 5. 缓存代理结果，避免重复处理
+	 * </pre>
+	 *
+	 * <h3>代理创建决策：</h3>
+	 * <ul>
+	 * <li><b>不需要代理</b>：基础设置类、已标记为不需要代理的Bean</li>
+	 * <li><b>需要代理</b>：有适用于当前Bean的拦截器（Advice、Advisor）</li>
+	 * </ul>
+	 *
+	 * <h3>缓存机制：</h3>
+	 * <ul>
+	 * <li><b>advisedBeans</b>: 记录哪些Bean需要被代理</li>
+	 * <li><b>proxyTypes</b>: 记录代理对象的类型</li>
+	 * <li><b>earlyBeanReferences</b>: 解决循环依赖的早期引用缓存</li>
+	 * </ul>
+	 *
+	 * @param bean 需要检查的Bean实例
+	 * @param beanName Bean的名称
+	 * @param cacheKey 缓存键（通常是beanClass或beanName）
+	 * @return 原始Bean或代理后的Bean
+	 */
 	protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
+		// 【第一阶段：快速检查是否需要处理】
+
+		// 检查1：是否是自定义TargetSource的Bean（已处理过）
 		if (StringUtils.hasLength(beanName) && this.targetSourcedBeans.contains(beanName)) {
 			return bean;
 		}
+
+		// 检查2：是否已经确定不需要代理（缓存检查）
 		if (Boolean.FALSE.equals(this.advisedBeans.get(cacheKey))) {
 			return bean;
 		}
+
+		// 检查3：是否是基础设施类或应该跳过的类
+		// 基础设施类包括：Advice、Advisor、AopInfrastructureBean等
+		// 这些类本身用于AOP功能，不应该被代理
 		if (isInfrastructureClass(bean.getClass()) || shouldSkip(bean.getClass(), beanName)) {
 			this.advisedBeans.put(cacheKey, Boolean.FALSE);
 			return bean;
 		}
 
+		// 【第二阶段：获取适用于当前Bean的拦截器】
 		// Create proxy if we have advice.
+		// 子类可以实现getAdvicesAndAdvisorsForBean方法来决定哪些Bean需要被代理
+		// 返回null表示不需要代理，返回空数组表示需要代理但没有额外的拦截器
 		Object[] specificInterceptors = getAdvicesAndAdvisorsForBean(bean.getClass(), beanName, null);
+
 		if (specificInterceptors != DO_NOT_PROXY) {
+			// 【需要代理：创建AOP代理对象】
 			this.advisedBeans.put(cacheKey, Boolean.TRUE);
 			Object proxy = createProxy(
 					bean.getClass(), beanName, specificInterceptors, new SingletonTargetSource(bean));
@@ -340,6 +430,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 			return proxy;
 		}
 
+		// 【不需要代理：标记并返回原始Bean】
 		this.advisedBeans.put(cacheKey, Boolean.FALSE);
 		return bean;
 	}

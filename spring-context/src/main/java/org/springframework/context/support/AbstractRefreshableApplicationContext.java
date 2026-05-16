@@ -27,6 +27,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextException;
 
 /**
+ * 【Spring容器核心基类】支持多次刷新的应用上下文基类，每次刷新都会创建新的BeanFactory实例
+ * 
  * Base class for {@link org.springframework.context.ApplicationContext}
  * implementations which are supposed to support multiple calls to {@link #refresh()},
  * creating a new internal bean factory instance every time.
@@ -117,16 +119,23 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 	 */
 	@Override
 	protected final void refreshBeanFactory() throws BeansException {
+		// 如果已存在Bean工厂，则销毁所有Bean并关闭工厂（用于容器刷新时重置）
 		if (hasBeanFactory()) {
 			destroyBeans();
 			closeBeanFactory();
 		}
 		try {
+			// 1. 创建新的Bean工厂（DefaultListableBeanFactory）
 			DefaultListableBeanFactory beanFactory = createBeanFactory();
+			// 2. 设置序列化ID（用于序列化/反序列化支持）
 			beanFactory.setSerializationId(getId());
+			// 3. 设置应用启动监视器（用于性能监控）
 			beanFactory.setApplicationStartup(getApplicationStartup());
+			// 4. 自定义Bean工厂配置（如是否允许循环依赖、Bean定义覆盖等）
 			customizeBeanFactory(beanFactory);
+			// 5. 【核心步骤】加载Bean定义（从XML、注解或其他配置源）
 			loadBeanDefinitions(beanFactory);
+			// 6. 将创建的Bean工厂赋值给当前上下文
 			this.beanFactory = beanFactory;
 		}
 		catch (IOException ex) {
@@ -220,6 +229,7 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 	}
 
 	/**
+	 * 【加载Bean定义-抽象方法】子类需要实现此方法来加载Bean定义（从XML、注解、Groovy等配置源）
 	 * Load bean definitions into the given bean factory, typically through
 	 * delegating to one or more bean definition readers.
 	 * @param beanFactory the bean factory to load bean definitions into

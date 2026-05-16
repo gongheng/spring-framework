@@ -1099,16 +1099,25 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	}
 
 	@Override
+	/**
+	 * 【实例化所有单例Bean的核心方法】
+	 * 
+	 * 这是Spring容器启动过程中最核心的方法之一，负责：
+	 * 1. 按顺序实例化所有非懒加载的单例Bean
+	 * 2. 触发SmartInitializingSingleton回调
+	 * 
+	 * 此方法执行完成后，容器中所有的单例Bean都将被实例化并初始化完成
+	 */
 	public void preInstantiateSingletons() throws BeansException {
 		if (logger.isTraceEnabled()) {
 			logger.trace("Pre-instantiating singletons in " + this);
 		}
 
-		// Iterate over a copy to allow for init methods which in turn register new bean definitions.
-		// While this may not be part of the regular factory bootstrap, it does otherwise work fine.
+		// 【创建Bean名称副本】使用副本进行迭代，允许初始化方法注册新的Bean定义
+		// 虽然这不是常规工厂引导的一部分，但可以正常工作
 		List<String> beanNames = new ArrayList<>(this.beanDefinitionNames);
 
-		// Trigger initialization of all non-lazy singleton beans...
+		// 【触发所有非懒加载单例Bean的初始化】
 		this.preInstantiationThread.set(PreInstantiation.MAIN);
 		if (this.mainThreadPrefix == null) {
 			this.mainThreadPrefix = getThreadNamePrefix();
@@ -1118,12 +1127,14 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			for (String beanName : beanNames) {
 				RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
 				if (!mbd.isAbstract() && mbd.isSingleton()) {
+					// 【核心】这里触发实际的Bean实例化过程
 					CompletableFuture<?> future = preInstantiateSingleton(beanName, mbd);
 					if (future != null) {
 						futures.add(future);
 					}
 				}
 			}
+			// 等待所有异步实例化完成
 			if (!futures.isEmpty()) {
 				try {
 					CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
@@ -1138,12 +1149,14 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 			this.preInstantiationThread.remove();
 		}
 
-		// Trigger post-initialization callback for all applicable beans...
+		// 【触发后初始化回调】触发SmartInitializingSingleton接口的回调
+		// 这个回调在所有单例Bean实例化完成后执行，适合做一些全局初始化工作
 		for (String beanName : beanNames) {
 			Object singletonInstance = getSingleton(beanName, false);
 			if (singletonInstance instanceof SmartInitializingSingleton smartSingleton) {
 				StartupStep smartInitialize = getApplicationStartup().start("spring.beans.smart-initialize")
 						.tag("beanName", beanName);
+				// 【关键回调】触发afterSingletonsInstantiated方法
 				smartSingleton.afterSingletonsInstantiated();
 				smartInitialize.end();
 			}
@@ -1626,21 +1639,64 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 		return new NamedBeanHolder<>(beanName, adaptBeanInstance(beanName, bean, requiredType.toClass()));
 	}
 
+	/**
+	 * 【Spring依赖解析的入口方法】解析指定描述符的依赖
+	 *
+	 * <h3>功能说明：</h3>
+	 * <p>这是Spring依赖注入的核心入口方法，负责将依赖描述符解析为实际的Bean对象。
+	 * 支持多种依赖类型：Optional、ObjectFactory、JSR-330 Provider、延迟解析等。
+	 *
+	 * <h3>处理流程：</h3>
+	 * <pre>
+	 * 1. Optional依赖 → 创建Optional包装的依赖
+	 * 2. ObjectFactory/ObjectProvider → 创建延迟查找的依赖提供器
+	 * 3. JSR-330 Provider → 创建JSR-330标准的依赖提供器
+	 * 4. 延迟解析代理 → 支持延迟初始化的依赖
+	 * 5. 普通依赖 → 调用doResolveDependency进行完整解析
+	 * </pre>
+	 *
+	 * <h3>关键特性：</h3>
+	 * <ul>
+	 * <li>支持多种依赖类型的特殊处理</li>
+	 * <li>支持延迟初始化的依赖代理</li>
+	 * <li>集成参数名发现机制</li>
+	 * <li>支持自动装配候选者解析</li>
+	 * </ul>
+	 *
+	 * @param descriptor 依赖描述符（包含类型、注解等信息）
+	 * @param requestingBeanName 请求该依赖的Bean名称（用于循环依赖检测）
+	 * @param autowiredBeanNames 自动装配的Bean名称集合（用于跟踪依赖关系）
+	 * @param typeConverter 类型转换器（用于类型转换）
+	 * @return 解析后的依赖对象，如果无法解析且非必需则返回null
+	 * @throws BeansException 如果依赖解析失败且依赖是必需的
+	 */
 	@Override
 	public @Nullable Object resolveDependency(DependencyDescriptor descriptor, @Nullable String requestingBeanName,
 			@Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
 
+		// 【步骤1】初始化参数名发现器，用于方法参数的名称推断
 		descriptor.initParameterNameDiscovery(getParameterNameDiscoverer());
+		
+		// 【步骤2】处理Optional类型的依赖（Spring 4.3+支持）
+		// 如果依赖类型是Optional&lt;T&gt;，则创建Optional包装的依赖对象
+		// 这样即使依赖不存在也不会抛出异常，而是返回Optional.empty()
 		if (Optional.class == descriptor.getDependencyType()) {
 			return createOptionalDependency(descriptor, requestingBeanName, autowiredBeanNames, null);
 		}
+		// 【步骤3】处理ObjectFactory/ObjectProvider类型的依赖
+		// 这两种类型支持延迟查找和按需获取Bean实例，是延迟初始化的基础
 		else if (ObjectFactory.class == descriptor.getDependencyType() ||
 				ObjectProvider.class == descriptor.getDependencyType()) {
 			return new DependencyObjectProvider(descriptor, requestingBeanName);
 		}
+		// 【步骤4】处理JSR-330 Provider类型的依赖
+		// 支持Jakarta Inject（JSR-330）标准的依赖注入，与@Inject注解配合使用
 		else if (jakartaInjectProviderClass == descriptor.getDependencyType()) {
 			return new Jsr330Factory().createDependencyProvider(descriptor, requestingBeanName);
 		}
+		// 【步骤5】处理延迟解析的依赖
+		// 如果依赖支持延迟解析（@Lazy注解），则创建代理对象延迟初始化
+		// 这样可以避免不必要的Bean实例化，提高应用启动性能
 		else if (descriptor.supportsLazyResolution()) {
 			Object result = getAutowireCandidateResolver().getLazyResolutionProxyIfNecessary(
 					descriptor, requestingBeanName);
@@ -1648,107 +1704,174 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				return result;
 			}
 		}
+		// 【步骤6】处理普通的依赖
+		// 调用doResolveDependency方法进行完整的依赖解析流程
 		return doResolveDependency(descriptor, requestingBeanName, autowiredBeanNames, typeConverter);
 	}
 
+	/**
+	 * 【Spring依赖解析的核心实现方法】执行完整的依赖解析流程
+	 *
+	 * <h3>核心职责：</h3>
+	 * <p>这是Spring依赖注入最核心的方法，实现了完整的依赖解析算法。
+	 * 按照优先级顺序处理各种情况，直到找到合适的依赖对象。
+	 *
+	 * <h3>解析策略（按优先级排序）：</h3>
+	 * <pre>
+	 * Step 1: 快捷解析 - 从缓存中获取已解析的依赖
+	 * Step 2: 值表达式解析 - 处理@Value注解的配置值
+	 * Step 3: 名称直接匹配 - 按照Bean名称直接查找
+	 * Step 4a: 多Bean处理 - 处理数组、集合、Map类型
+	 * Step 4b: 类型匹配查找 - 按类型查找所有候选Bean
+	 * Step 4c: 集合回退处理 - 特殊集合类型的回退处理
+	 * Step 5: 唯一候选确定 - 从多个候选中确定最终Bean
+	 * </pre>
+	 *
+	 * <h3>关键特性：</h3>
+	 * <ul>
+	 * <li>支持@Value注解的SpEL表达式解析</li>
+	 * <li>支持@Qualifier注解的限定符匹配</li>
+	 * <li>支持@Primary注解的首选候选者</li>
+	 * <li>支持集合类型的自动装配</li>
+	 * <li>完整的异常处理和错误提示</li>
+	 * </ul>
+	 */
 	@SuppressWarnings("NullAway")  // Dataflow analysis limitation
 	public @Nullable Object doResolveDependency(DependencyDescriptor descriptor, @Nullable String beanName,
 			@Nullable Set<String> autowiredBeanNames, @Nullable TypeConverter typeConverter) throws BeansException {
 
+		// 【前置处理】设置当前注入点，用于错误报告和循环依赖检测
 		InjectionPoint previousInjectionPoint = ConstructorResolver.setCurrentInjectionPoint(descriptor);
 		try {
-			// Step 1: pre-resolved shortcut for single bean match, for example, from @Autowired
+			// 【步骤1】快捷解析检查 - 尝试使用预解析的快捷方式
+			// 某些情况下依赖已经被解析过，可以直接从缓存中获取
+			// 例如：同一个Bean定义的多次依赖注入
 			Object shortcut = descriptor.resolveShortcut(this);
 			if (shortcut != null) {
 				return shortcut;
 			}
 
+			// 获取依赖的目标类型
 			Class<?> type = descriptor.getDependencyType();
 
-			// Step 2: pre-defined value or expression, for example, from @Value
+			// 【步骤2】处理@Value注解的值和表达式
+			// 检查是否有预定义的值或SpEL表达式（来自@Value注解）
+			// @Value可以注入配置值、环境变量、SpEL表达式计算结果等
 			Object value = getAutowireCandidateResolver().getSuggestedValue(descriptor);
 			if (value != null) {
+				// 如果值是字符串类型，则进行属性占位符解析和SpEL表达式求值
 				if (value instanceof String strValue) {
+					// 解析嵌入式值，例如：${app.name} → "MyApp"
 					String resolvedValue = resolveEmbeddedValue(strValue);
 					BeanDefinition bd = (beanName != null && containsBean(beanName) ?
 							getMergedBeanDefinition(beanName) : null);
+					// 求值SpEL表达式，例如：#{systemProperties['user.home']}
 					value = evaluateBeanDefinitionString(resolvedValue, bd);
 				}
+				// 使用类型转换器将值转换为目标类型
 				TypeConverter converter = (typeConverter != null ? typeConverter : getTypeConverter());
 				try {
 					return converter.convertIfNecessary(value, type, descriptor.getTypeDescriptor());
 				}
 				catch (UnsupportedOperationException ex) {
-					// A custom TypeConverter which does not support TypeDescriptor resolution...
+					// 自定义TypeConverter可能不支持TypeDescriptor解析，使用降级方案
 					return (descriptor.getField() != null ?
 							converter.convertIfNecessary(value, type, descriptor.getField()) :
 							converter.convertIfNecessary(value, type, descriptor.getMethodParameter()));
 				}
 			}
 
-			// Step 3: shortcut for declared dependency name or qualifier-suggested name matching target bean name
+			// 【步骤3】按名称直接匹配查找Bean
+			// 如果依赖描述符中指定了依赖名称，或者@Qualifier注解建议了Bean名称
+			// 则直接按名称查找，这是最高效的查找方式
 			if (descriptor.usesStandardBeanLookup()) {
 				String dependencyName = descriptor.getDependencyName();
+				// 如果没有明确指定依赖名称，则尝试从@Qualifier注解获取建议名称
 				if (dependencyName == null || !containsBean(dependencyName)) {
 					String suggestedName = getAutowireCandidateResolver().getSuggestedName(descriptor);
 					dependencyName = (suggestedName != null && containsBean(suggestedName) ? suggestedName : null);
 				}
+				// 如果找到了依赖名称，则进行严格匹配验证
 				if (dependencyName != null) {
+					// 将别名转换为规范的Bean名称（因为dependencyName可能是别名）
 					dependencyName = canonicalName(dependencyName);  // dependency name can be alias of target name
+					// 验证Bean是否满足所有条件：
+					// 1. 类型匹配 2. 是自动装配候选者 3. 不是回退候选 4. 没有Primary冲突 5. 不是自引用
 					if (isTypeMatch(dependencyName, type) && isAutowireCandidate(dependencyName, descriptor) &&
 							!isFallback(dependencyName) && !hasPrimaryConflict(dependencyName, type) &&
 							!isSelfReference(beanName, dependencyName)) {
+						// 记录自动装配的Bean名称（用于依赖关系管理）
 						if (autowiredBeanNames != null) {
 							autowiredBeanNames.add(dependencyName);
 						}
+						// 解析Bean实例并返回
 						Object dependencyBean = resolveBean(dependencyName, descriptor.getResolvableType());
 						return resolveInstance(dependencyBean, descriptor, type, dependencyName);
 					}
 				}
 			}
 
-			// Step 4a: multiple beans as stream / array / standard collection / plain map
+			// 【步骤4a】处理多Bean情况 - Stream/数组/集合/Map类型
+			// 如果依赖类型是数组、集合、Map或Stream，则需要查找所有匹配的Bean
+			// 例如：@Autowired List&lt;UserService&gt; 会注入所有UserService类型的Bean
 			Object multipleBeans = resolveMultipleBeans(descriptor, beanName, autowiredBeanNames, typeConverter);
 			if (multipleBeans != null) {
 				return multipleBeans;
 			}
-			// Step 4b: direct bean matches, possibly direct beans of type Collection / Map
+			
+			// 【步骤4b】按类型查找所有匹配的Bean
+			// 根据依赖类型在容器中查找所有类型匹配的Bean
+			// 返回的是Map<Bean名称, Bean实例>，可能包含0个、1个或多个候选者
 			Map<String, Object> matchingBeans = findAutowireCandidates(beanName, type, descriptor);
+			
+			// 如果没有找到任何匹配的Bean
 			if (matchingBeans.isEmpty()) {
-				// Step 4c (fallback): custom Collection / Map declarations for collecting multiple beans
+				// 【步骤4c】回退处理 - 尝试特殊的集合/Map声明
+				// 某些情况下集合类型的声明需要特殊处理
 				multipleBeans = resolveMultipleBeansFallback(descriptor, beanName, autowiredBeanNames, typeConverter);
 				if (multipleBeans != null) {
 					return multipleBeans;
 				}
-				// Raise exception if nothing found for required injection point
+				// 如果是必需的依赖且找不到匹配的Bean，抛出异常
+				// @Autowired(required = true) 是默认值
 				if (isRequired(descriptor)) {
 					raiseNoMatchingBeanFound(type, descriptor.getResolvableType(), descriptor);
 				}
+				// 非必需的依赖返回null（@Autowired(required = false)）
 				return null;
 			}
 
 			String autowiredBeanName;
 			Object instanceCandidate;
 
-			// Step 5: determine single candidate
+			// 【步骤5】确定唯一的自动装配候选者
+			// 当找到多个匹配的Bean时，需要使用特定的策略确定最终使用哪一个
 			if (matchingBeans.size() > 1) {
+				// 【情况1】找到多个候选Bean，调用determineAutowireCandidate确定最终候选者
+				// 该方法会按照以下优先级进行选择：
+				// 1. @Primary注解的Bean
+				// 2. @Priority注解的Bean（数字越小优先级越高）
+				// 3. 与依赖名称匹配的Bean
+				// 4. @Qualifier注解匹配的Bean
 				autowiredBeanName = determineAutowireCandidate(matchingBeans, descriptor);
 				if (autowiredBeanName == null) {
+					// 如果无法确定唯一的候选者，则根据情况处理
 					if (isRequired(descriptor) || !indicatesArrayCollectionOrMap(type)) {
-						// Raise exception if no clear match found for required injection point
+						// 【情况1a】必需依赖或非集合类型：抛出异常
+						// 找到多个匹配的Bean但无法确定使用哪一个，这是典型的歧义错误
 						return descriptor.resolveNotUnique(descriptor.getResolvableType(), matchingBeans);
 					}
 					else {
-						// In case of an optional Collection/Map, silently ignore a non-unique case:
-						// possibly it was meant to be an empty collection of multiple regular beans
-						// (before 4.3 in particular when we didn't even look for collection beans).
+						// 【情况1b】可选的集合/Map类型：静默返回null
+						// 可能本意是注入一个空的集合，而不是多个Bean的集合
+						// 这种情况在Spring 4.3之前比较常见
 						return null;
 					}
 				}
 				instanceCandidate = matchingBeans.get(autowiredBeanName);
 			}
 			else {
-				// We have exactly one match.
+				// 【情况2】恰好找到唯一一个匹配的Bean（最理想的情况）
 				Map.Entry<String, Object> entry = matchingBeans.entrySet().iterator().next();
 				autowiredBeanName = entry.getKey();
 				instanceCandidate = entry.getValue();
@@ -1937,36 +2060,79 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	}
 
 	/**
-	 * Find bean instances that match the required type.
-	 * Called during autowiring for the specified bean.
-	 * @param beanName the name of the bean that is about to be wired
-	 * @param requiredType the actual type of bean to look for
-	 * (may be an array component type or collection element type)
-	 * @param descriptor the descriptor of the dependency to resolve
-	 * @return a Map of candidate names and candidate instances that match
-	 * the required type (never {@code null})
-	 * @throws BeansException in case of errors
+	 * 【查找自动装配候选者的核心方法】根据类型查找所有匹配的Bean
+	 *
+	 * <h3>核心职责：</h3>
+	 * <p>这是Spring自动装配的核心查找方法，负责在容器中查找所有指定类型的Bean，
+	 * 并根据各种条件过滤出合适的自动装配候选者。
+	 *
+	 * <h3>查找流程：</h3>
+	 * <pre>
+	 * Step 1: 类型匹配查找 - 根据类型查找所有匹配的Bean名称
+	 * Step 2: 注册依赖解析 - 添加已注册的依赖解析（如BeanFactory）
+	 * Step 3: 候选者过滤 - 过滤掉不符合条件的Bean
+	 * Step 4: 回退处理 - 如果第一次查找失败，尝试回退匹配策略
+	 * </pre>
+	 *
+	 * <h3>过滤条件：</h3>
+	 * <ul>
+	 * <li>排除自引用（Bean不注入自己）</li>
+	 * <li>检查自动装配候选者资格</li>
+	 * <li>检查泛型类型匹配</li>
+	 * <li>检查@Qualifier注解匹配</li>
+	 * </ul>
+	 *
+	 * <h3>关键特性：</h3>
+	 * <ul>
+	 * <li>支持祖先容器的Bean查找</li>
+	 * <li>支持泛型类型的精确匹配</li>
+	 * <li>支持集合和数组的元素类型匹配</li>
+	 * <li>支持依赖回退机制</li>
+	 * </ul>
+	 *
+	 * @param beanName 正在装配的Bean名称（用于自引用检测）
+	 * @param requiredType 需要查找的目标类型（可能是数组和集合的元素类型）
+	 * @param descriptor 依赖描述符（包含注解、泛型等详细信息）
+	 * @return 匹配的候选者Map，键为Bean名称，值为Bean实例（不会为null）
+	 * @throws BeansException 如果查找过程中出现错误
 	 * @see #autowireByType
 	 * @see #autowireConstructor
 	 */
 	protected Map<String, Object> findAutowireCandidates(
 			@Nullable String beanName, Class<?> requiredType, DependencyDescriptor descriptor) {
 
+		// 【步骤1】根据类型查找所有匹配的Bean名称（包括祖先容器）
+		// 该方法会在当前容器和所有祖先容器中查找指定类型的所有Bean
+		// 返回的是Bean名称数组，不是实例，这样可以延迟实例化
 		String[] candidateNames = BeanFactoryUtils.beanNamesForTypeIncludingAncestors(
 				this, requiredType, true, descriptor.isEager());
+		// 创建结果Map，使用LinkedHashMap保持插入顺序
 		Map<String, Object> result = CollectionUtils.newLinkedHashMap(candidateNames.length);
+		
+		// 【步骤2】处理已注册的依赖解析
+		// resolvableDependencies包含了Spring自动注册的特殊依赖
+		// 例如：BeanFactory、ApplicationContext、ResourceLoader等
+		// 这些依赖可以直接注入，不需要通过常规的Bean查找
 		for (Map.Entry<Class<?>, Object> classObjectEntry : this.resolvableDependencies.entrySet()) {
 			Class<?> autowiringType = classObjectEntry.getKey();
+			// 检查已注册依赖的类型是否匹配需求类型
 			if (autowiringType.isAssignableFrom(requiredType)) {
 				Object autowiringValue = classObjectEntry.getValue();
+				// 解析自动装配值（处理集合、数组等情况）
 				autowiringValue = AutowireUtils.resolveAutowiringValue(autowiringValue, requiredType);
+				// 类型安全检查
 				if (requiredType.isInstance(autowiringValue)) {
 					result.put(ObjectUtils.identityToString(autowiringValue), autowiringValue);
-					break;
+					break;  // 找到一个就退出（通常只有一个）
 				}
 			}
 		}
+		
+		// 【步骤3】遍历所有候选Bean名称，添加符合条件的候选者
 		for (String candidate : candidateNames) {
+			// 过滤条件：1. 不是自引用 2. 是自动装配候选者
+			// 自引用检测：避免Bean注入自己（会导致循环依赖）
+			// 自动装配候选者检测：检查@Autowired、@Primary等条件
 			if (!isSelfReference(beanName, candidate) && isAutowireCandidate(candidate, descriptor)) {
 				addCandidateEntry(result, candidate, descriptor, requiredType);
 			}
@@ -2021,21 +2187,66 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	}
 
 	/**
-	 * Determine the autowire candidate in the given set of beans.
-	 * <p>Looks for {@code @Primary} and {@code @Priority} (in that order).
-	 * @param candidates a Map of candidate names and candidate instances
-	 * that match the required type, as returned by {@link #findAutowireCandidates}
-	 * @param descriptor the target dependency to match against
-	 * @return the name of the autowire candidate, or {@code null} if none found
+	 * 【确定唯一自动装配候选者的决策方法】从多个候选Bean中选择最终的一个
+	 *
+	 * <h3>核心职责：</h3>
+	 * <p>当Spring找到多个类型匹配的Bean时，需要通过特定的决策算法确定使用哪一个。
+	 * 这个方法实现了完整的自动装配决策逻辑。
+	 *
+	 * <h3>决策优先级（按顺序）：</h3>
+	 * <pre>
+	 * Priority 1: @Primary - 首选Bean，标记为主要候选者
+	 * Priority 2: 名称匹配 - Bean名称与依赖名称匹配
+	 * Priority 3: @Qualifier - 限定符注解匹配
+	 * Priority 4: @Priority - 优先级注解（数字越小优先级越高）
+	 * Priority 5: 默认候选者 - 唯一标记为默认的Bean
+	 * </pre>
+	 *
+	 * <h3>决策规则：</h3>
+	 * <ul>
+	 * <li>@Primary具有最高优先级，无论有多少个候选者</li>
+	 * <li>如果没有@Primary，则检查名称和限定符匹配</li>
+	 * <li>@Priority注解用于细粒度的优先级控制</li>
+	 * <li>如果所有策略都失败，返回null导致异常抛出</li>
+	 * </ul>
+	 *
+	 * <h3>典型应用场景：</h3>
+	 * <pre>
+	 * // 场景1：使用@Primary指定首选实现
+	 * @Primary
+	 * @Service("primaryDataSource")
+	 * class PrimaryDataSource implements DataSource {}
+	 *
+	 * // 场景2：使用@Qualifier限定符
+	 * @Autowired
+	 * @Qualifier("specificDataSource")
+	 * DataSource dataSource;
+	 *
+	 * // 场景3：使用@Priority指定优先级
+	 * @Service
+	 * @Priority(1)
+	 * class HighPriorityService implements Service {}
+	 * </pre>
+	 *
+	 * @param candidates 候选Bean的Map，键为Bean名称，值为Bean实例
+	 * @param descriptor 依赖描述符（包含类型、注解等信息）
+	 * @return 选定的Bean名称，如果无法确定则返回null
 	 */
 	protected @Nullable String determineAutowireCandidate(Map<String, Object> candidates, DependencyDescriptor descriptor) {
 		Class<?> requiredType = descriptor.getDependencyType();
-		// Step 1: check primary candidate
+		
+		// 【决策1】检查@Primary注解的首选候选者
+		// @Primary是Spring中最高优先级的自动装配提示
+		// 当有多个候选Bean时，标记为@Primary的Bean会被优先选择
+		// 注意：如果有多个@Primary的Bean，仍然会抛出异常
 		String primaryCandidate = determinePrimaryCandidate(candidates, requiredType);
 		if (primaryCandidate != null) {
 			return primaryCandidate;
 		}
-		// Step 2a: match bean name against declared dependency name
+		
+		// 【决策2a】检查Bean名称与依赖名称的匹配
+		// 如果依赖描述符中指定了依赖名称（例如@Autowired @Qualifier("beanName")），
+		// 则查找与该名称完全匹配的Bean
 		String dependencyName = descriptor.getDependencyName();
 		if (dependencyName != null) {
 			for (String beanName : candidates.keySet()) {
@@ -2044,7 +2255,10 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				}
 			}
 		}
-		// Step 2b: match bean name against qualifier-suggested name
+		
+		// 【决策2b】检查Bean名称与限定符建议名称的匹配
+		// @Qualifier注解可以建议一个Bean名称
+		// 这是比@Primary低一级的优先级
 		String suggestedName = getAutowireCandidateResolver().getSuggestedName(descriptor);
 		if (suggestedName != null) {
 			for (String beanName : candidates.keySet()) {
@@ -2053,7 +2267,10 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				}
 			}
 		}
-		// Step 3: check highest priority candidate
+		
+		// 【决策3】检查@Priority注解的最高优先级候选者
+		// @Priority注解可以指定数字优先级（越小优先级越高）
+		// 这是JSR-250标准的注解，比@Primary和@Qualifier优先级都低
 		String priorityCandidate = determineHighestPriorityCandidate(candidates, requiredType);
 		if (priorityCandidate != null) {
 			return priorityCandidate;

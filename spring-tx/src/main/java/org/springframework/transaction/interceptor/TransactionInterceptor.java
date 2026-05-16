@@ -35,17 +35,36 @@ import org.springframework.transaction.TransactionExecution;
 import org.springframework.transaction.TransactionManager;
 
 /**
- * AOP Alliance MethodInterceptor for declarative transaction
- * management using the common Spring transaction infrastructure
- * ({@link org.springframework.transaction.PlatformTransactionManager}/
- * {@link org.springframework.transaction.ReactiveTransactionManager}).
+ * 【Spring声明式事务的核心拦截器】AOP Alliance MethodInterceptor实现
  *
- * <p>Derives from the {@link TransactionAspectSupport} class which
- * contains the integration with Spring's underlying transaction API.
- * TransactionInterceptor simply calls the relevant superclass methods
- * such as {@link #invokeWithinTransaction} in the correct order.
+ * <h3>核心作用：</h3>
+ * <ul>
+ * <li><b>方法拦截</b>：拦截带@Transactional注解的方法</li>
+ * <li><b>事务管理</b>：根据事务属性管理事务的生命周期</li>
+ * <li><b>异常处理</b>：根据异常类型决定提交或回滚</li>
+ * <li><b>事务同步</b>：管理事务同步的注册和调用</li>
+ * </ul>
  *
- * <p>TransactionInterceptors are thread-safe.
+ * <h3>工作原理：</h3>
+ * <pre>
+ * 1. 拦截方法调用
+ * 2. 获取事务属性（@Transactional注解配置）
+ * 3. 确定事务管理器
+ * 4. 根据传播行为创建或加入事务
+ * 5. 执行目标方法
+ * 6. 根据执行结果提交或回滚事务
+ * 7. 清理事务资源
+ * </pre>
+ *
+ * <h3>继承关系：</h3>
+ * <ul>
+ * <li><b>继承TransactionAspectSupport</b>：包含事务管理的核心逻辑</li>
+ * <li><b>实现MethodInterceptor</b>：AOP拦截器接口</li>
+ * <li><b>实现ApplicationEventPublisherAware</b>：发布事务相关事件</li>
+ * </ul>
+ *
+ * <h3>线程安全性：</h3>
+ * <p>TransactionInterceptors是线程安全的，可以在多线程环境中使用。
  *
  * @author Rod Johnson
  * @author Juergen Hoeller
@@ -119,23 +138,61 @@ public class TransactionInterceptor extends TransactionAspectSupport
 		this.applicationEventPublisher = applicationEventPublisher;
 	}
 
+	/**
+	 * 【事务拦截的核心方法】拦截方法调用并管理事务
+	 *
+	 * <h3>执行流程：</h3>
+	 * <pre>
+	 * 1. 确定目标类（可能为null）
+	 * 2. 调用invokeWithinTransaction方法管理事务
+	 *    ├─ 获取事务属性
+	 *    ├─ 根据传播行为创建/加入事务
+	 *    ├─ 执行目标方法
+	 *    └─ 根据执行结果提交或回滚事务
+	 * 3. 发布事务事件（如果配置了事件发布器）
+	 * </pre>
+	 *
+	 * <h3>事务处理逻辑：</h3>
+	 * <ul>
+	 * <li><b>事务属性获取</b>：从@Transaction注解或配置中获取</li>
+	 * <li><b>传播行为处理</b>：根据传播行为决定如何处理事务</li>
+	 * <li><b>异常回滚规则</b>：根据异常类型和回滚规则决定是否回滚</li>
+	 * <li><b>事件发布</b>：发布事务相关事件供监听器处理</li>
+	 * </ul>
+	 *
+	 * @param invocation 方法调用对象，包含目标方法、参数等信息
+	 * @return 方法执行的结果
+	 * @throws Throwable 方法执行过程中抛出的异常
+	 */
 	@Override
 	public @Nullable Object invoke(MethodInvocation invocation) throws Throwable {
+		// 【第一步：确定目标类】
 		// Work out the target class: may be {@code null}.
 		// The TransactionAttributeSource should be passed the target class
 		// as well as the method, which may be from an interface.
 		Class<?> targetClass = (invocation.getThis() != null ? AopUtils.getTargetClass(invocation.getThis()) : null);
 
+		// 【第二步：调用事务管理核心逻辑】
 		// Adapt to TransactionAspectSupport's invokeWithinTransaction...
 		return invokeWithinTransaction(invocation.getMethod(), targetClass, new InvocationCallback() {
+			/**
+			 * 【执行目标方法】在事务上下文中执行实际的方法调用
+			 */
 			@Override
 			public @Nullable Object proceedWithInvocation() throws Throwable {
 				return invocation.proceed();
 			}
+
+			/**
+			 * 【回滚事件处理】当事务回滚时调用
+			 */
 			@Override
 			public void onRollback(Throwable failure, TransactionExecution execution) {
+				// 创建方法回滚事件
 				MethodRollbackEvent event = new MethodRollbackEvent(invocation, failure, execution);
 				logger.trace(event, failure);
+
+				// 发布回滚事件给监听器
 				if (applicationEventPublisher != null) {
 					try {
 						applicationEventPublisher.publishEvent(event);

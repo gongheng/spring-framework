@@ -59,7 +59,43 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 
 /**
- * CGLIB-based {@link AopProxy} implementation for the Spring AOP framework.
+ * 【CGLIB代理的核心实现】基于CGLIB字节码生成技术的AOP代理实现
+ *
+ * <h3>CGLIB代理原理：</h3>
+ * <ul>
+ * <li><b>基于继承</b>：通过继承目标类创建子类代理</li>
+ * <li><b>字节码生成</b>：使用ASM字节码操作库动态生成代理类</li>
+ * <li><b>方法拦截</b>：通过MethodInterceptor接口拦截方法调用</li>
+ * <li><b>性能优势</b>：比JDK动态代理性能更好，执行速度更快</li>
+ * </ul>
+ *
+ * <h3>与JDK动态代理的对比：</h3>
+ * <ul>
+ * <li><b>代理方式</b>：CGLIB基于继承，JDK基于接口</li>
+ * <li><b>适用范围</b>：CGLIB可以代理类，JDK只能代理接口</li>
+ * <li><b>性能</b>：CGLIB性能更好，但初始化稍慢</li>
+ * <li><b>限制</b>：CGLIB不能代理final类和方法</li>
+ * </ul>
+ *
+ * <h3>CGLIB回调机制：</h3>
+ * <pre>
+ * CGLIB使用多个回调类型的索引数组：
+ * - AOP_PROXY: 0 - 主要的AOP拦截器
+ * - INVOKE_TARGET: 1 - 直接调用目标对象
+ * - NO_OVERRIDE: 2 - 不重写的方法
+ * - DISPATCH_TARGET: 3 - 分发到目标对象
+ * - DISPATCH_ADVISED: 4 - 分发到Advised配置
+ * - INVOKE_EQUALS: 5 - 处理equals方法
+ * - INVOKE_HASHCODE: 6 - 处理hashCode方法
+ * </pre>
+ *
+ * <h3>Enhancer配置：</h3>
+ * <ul>
+ * <li><b> superclass</b>：设置父类（目标类）</li>
+ * <li><b> interfaces</b>：设置要实现的接口</li>
+ * <li><b> callbacks</b>：设置回调数组</li>
+ * <li><b> callbackFilter</b>：设置回调过滤器</li>
+ * </ul>
  *
  * <p>Objects of this type should be obtained through proxy factories,
  * configured by an {@link AdvisedSupport} object. This class is internal
@@ -171,68 +207,120 @@ class CglibAopProxy implements AopProxy, Serializable {
 		return (Class<?>) buildProxy(classLoader, true);
 	}
 
+	/**
+	 * 【CGLIB代理创建的核心方法】构建CGLIB代理对象或代理类
+	 *
+	 * <h3>代理创建流程：</h3>
+	 * <pre>
+	 * 1. 确定目标类和代理父类
+	 * 2. 验证目标类（检查final、可见性等）
+	 * 3. 配置CGLIB Enhancer
+	 * 4. 创建回调数组和回调过滤器
+	 * 5. 生成代理类或创建代理实例
+	 * </pre>
+	 *
+	 * <h3>Enhancer配置详解：</h3>
+	 * <ul>
+	 * <li><b>superclass</b>: 设置父类（目标类）</li>
+	 * <li><b>interfaces</b>: 设置要实现的接口</li>
+	 * <li><b>namingPolicy</b>: 设置命名策略（SpringNamingPolicy）</li>
+	 * <li><b>callbacks</b>: 设置回调数组（多个MethodInterceptor）</li>
+	 * <li><b>callbackFilter</b>: 设置回调过滤器（决定使用哪个回调）</li>
+	 * </ul>
+	 *
+	 * <h3>异常处理：</h3>
+	 * <ul>
+	 * <li>CodeGenerationException：字节码生成失败（final类等）</li>
+	 * <li>IllegalArgumentException：参数配置错误</li>
+	 * </ul>
+	 *
+	 * @param classLoader 类加载器，可能为null
+	 * @param classOnly 是否只生成代理类而不创建实例
+	 * @return CGLIB代理对象或代理类
+	 * @throws AopConfigException 如果代理创建失败
+	 */
 	private Object buildProxy(@Nullable ClassLoader classLoader, boolean classOnly) {
 		if (logger.isTraceEnabled()) {
 			logger.trace("Creating CGLIB proxy: " + this.advised.getTargetSource());
 		}
 
 		try {
+			// 【第一步：确定目标类和代理父类】
 			Class<?> rootClass = this.advised.getTargetClass();
 			Assert.state(rootClass != null, "Target class must be available for creating a CGLIB proxy");
 
+			// 确定代理的父类（处理已经代理过的情况）
 			Class<?> proxySuperClass = rootClass;
 			if (rootClass.getName().contains(ClassUtils.CGLIB_CLASS_SEPARATOR)) {
+				// 目标类已经是CGLIB代理类，使用其父类作为代理父类
 				proxySuperClass = rootClass.getSuperclass();
+				// 将原代理类的接口添加到当前代理配置中
 				Class<?>[] additionalInterfaces = rootClass.getInterfaces();
 				for (Class<?> additionalInterface : additionalInterfaces) {
 					this.advised.addInterface(additionalInterface);
 				}
 			}
 
+			// 【第二步：验证目标类】
 			// Validate the class, writing log messages as necessary.
 			validateClassIfNecessary(proxySuperClass, classLoader);
 
+			// 【第三步：配置CGLIB Enhancer】
 			// Configure CGLIB Enhancer...
 			Enhancer enhancer = createEnhancer();
+
+			// 配置类加载器
 			if (classLoader != null) {
 				enhancer.setClassLoader(classLoader);
+				// 如果类加载器支持类重新加载，禁用缓存
 				if (classLoader instanceof SmartClassLoader smartClassLoader &&
 						smartClassLoader.isClassReloadable(proxySuperClass)) {
 					enhancer.setUseCache(false);
 				}
 			}
+
+			// 配置父类和接口
 			enhancer.setSuperclass(proxySuperClass);
 			enhancer.setInterfaces(AopProxyUtils.completeProxiedInterfaces(this.advised));
 			enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
 			enhancer.setAttemptLoad(enhancer.getUseCache() && AotDetector.useGeneratedArtifacts());
+
+			// 配置字节码生成策略
 			enhancer.setStrategy(KotlinDetector.isKotlinType(proxySuperClass) ?
 					new ClassLoaderAwareGeneratorStrategy(classLoader) :
 					new ClassLoaderAwareGeneratorStrategy(classLoader, undeclaredThrowableStrategy)
 			);
 
+			// 【第四步：创建回调数组和回调过滤器】
+			// 获取所有回调（拦截器）
 			Callback[] callbacks = getCallbacks(rootClass);
 			Class<?>[] types = new Class<?>[callbacks.length];
 			for (int x = 0; x < types.length; x++) {
 				types[x] = callbacks[x].getClass();
 			}
+
+			// 创建回调过滤器（决定每个方法使用哪个回调）
 			// fixedInterceptorMap only populated at this point, after getCallbacks call above
 			ProxyCallbackFilter filter = new ProxyCallbackFilter(
 					this.advised.getConfigurationOnlyCopy(), this.fixedInterceptorMap, this.fixedInterceptorOffset);
 			enhancer.setCallbackFilter(filter);
 			enhancer.setCallbackTypes(types);
 
+			// 【第五步：生成代理类或创建代理实例】
 			// Generate the proxy class and create a proxy instance.
 			// ProxyCallbackFilter has method introspection capability with Advisor access.
 			try {
 				return (classOnly ? createProxyClass(enhancer) : createProxyClassAndInstance(enhancer, callbacks));
 			}
 			finally {
+				// 【清理工作】减少ProxyCallbackFilter的状态，避免内存泄漏
 				// Reduce ProxyCallbackFilter to key-only state for its class cache role
 				// in the CGLIB$CALLBACK_FILTER field, not leaking any Advisor state...
 				filter.advised.reduceToAdvisorKey();
 			}
 		}
 		catch (CodeGenerationException | IllegalArgumentException ex) {
+			// 【常见错误】CGLIB子类生成失败
 			throw new AopConfigException("Could not generate CGLIB subclass of " + this.advised.getTargetClass() +
 					": Common causes of this problem include using a final class or a non-visible class",
 					ex);

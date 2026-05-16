@@ -36,75 +36,67 @@ import org.springframework.transaction.support.TransactionSynchronizationUtils;
 import org.springframework.util.Assert;
 
 /**
- * {@link org.springframework.transaction.PlatformTransactionManager} implementation
- * for a single JDBC {@link javax.sql.DataSource}. This class is capable of working
- * in any environment with any JDBC driver, as long as the setup uses a
- * {@code javax.sql.DataSource} as its {@code Connection} factory mechanism.
- * Binds a JDBC {@code Connection} from the specified {@code DataSource} to the
- * current thread, potentially allowing for one thread-bound {@code Connection}
- * per {@code DataSource}.
+ * 【JDBC数据源事务管理器】单个JDBC DataSource的PlatformTransactionManager实现
  *
- * <p><b>Note: The {@code DataSource} that this transaction manager operates on
- * needs to return independent {@code Connection}s.</b> The {@code Connection}s
- * typically come from a connection pool but the {@code DataSource} must not return
- * specifically scoped or constrained {@code Connection}s. This transaction manager
- * will associate {@code Connection}s with thread-bound transactions, according
- * to the specified propagation behavior. It assumes that a separate, independent
- * {@code Connection} can be obtained even during an ongoing transaction.
+ * <h3>核心功能：</h3>
+ * <ul>
+ * <li><b>JDBC连接管理</b>：管理数据源连接的事务生命周期</li>
+ * <li><b>线程绑定</b>：将JDBC连接绑定到当前线程，支持每个数据源一个连接</li>
+ * <li><b>事务传播</b>：支持标准的事务传播行为</li>
+ * <li><b>嵌套事务</b>：通过JDBC Savepoint机制支持嵌套事务</li>
+ * </ul>
  *
- * <p>Application code is required to retrieve the JDBC {@code Connection} via
- * {@link DataSourceUtils#getConnection(DataSource)} instead of a standard
- * EE-style {@link DataSource#getConnection()} call. Spring classes such as
- * {@link org.springframework.jdbc.core.JdbcTemplate} use this strategy implicitly.
- * If not used in combination with this transaction manager, the
- * {@link DataSourceUtils} lookup strategy behaves exactly like the native
- * {@code DataSource} lookup; it can thus be used in a portable fashion.
+ * <h3>工作原理：</h3>
+ * <pre>
+ * 1. 开始事务：
+ *    ├─ 从DataSource获取Connection
+ *    ├─ 设置事务隔离级别和只读状态
+ *    ├─ 禁用自动提交
+ *    └─ 将Connection绑定到当前线程
  *
- * <p>Alternatively, you can allow application code to work with the standard
- * EE-style lookup pattern {@link DataSource#getConnection()}, for example
- * for legacy code that is not aware of Spring at all. In that case, define a
- * {@link TransactionAwareDataSourceProxy} for your target {@code DataSource},
- * and pass that proxy {@code DataSource} to your DAOs which will automatically
- * participate in Spring-managed transactions when accessing it.
+ * 2. 执行操作：
+ *    ├─ 应用通过DataSourceUtils获取Connection
+ *    ├─ 执行SQL操作
+ *    └─ Connection保持事务状态
  *
- * <p>Supports custom isolation levels, and timeouts which get applied as
- * appropriate JDBC statement timeouts. To support the latter, application code
- * must either use {@link org.springframework.jdbc.core.JdbcTemplate}, call
- * {@link DataSourceUtils#applyTransactionTimeout} for each created JDBC
- * {@code Statement}, or go through a {@link TransactionAwareDataSourceProxy}
- * which will create timeout-aware JDBC {@code Connection}s and {@code Statement}s
- * automatically.
+ * 3. 提交事务：
+ *    ├─ 调用Connection.commit()
+ *    ├─ 恢复自动提交状态
+ *    └─ 释放Connection到连接池
  *
- * <p>Consider defining a {@link LazyConnectionDataSourceProxy} for your target
- * {@code DataSource}, pointing both this transaction manager and your DAOs to it.
- * This will lead to optimized handling of "empty" transactions, i.e. of transactions
- * without any JDBC statements executed. A {@code LazyConnectionDataSourceProxy} will
- * not fetch an actual JDBC {@code Connection} from the target {@code DataSource}
- * until a {@code Statement} gets executed, lazily applying the specified transaction
- * settings to the target {@code Connection}.
+ * 4. 回滚事务：
+ *    ├─ 调用Connection.rollback()
+ *    ├─ 恢复自动提交状态
+ *    └─ 释放Connection到连接池
+ * </pre>
  *
- * <p>This transaction manager supports nested transactions via the JDBC
- * {@link java.sql.Savepoint} mechanism. The
- * {@link #setNestedTransactionAllowed "nestedTransactionAllowed"} flag defaults
- * to "true", since nested transactions will work without restrictions on JDBC
- * drivers that support savepoints (such as the Oracle JDBC driver).
+ * <h3>连接获取策略：</h3>
+ * <p>应用代码必须通过 {@link DataSourceUtils#getConnection(DataSource)} 获取连接，
+ * 而不是标准的 {@link DataSource#getConnection()} 调用。Spring类如 {@link org.springframework.jdbc.core.JdbcTemplate}
+ * 隐式地使用此策略。
  *
- * <p>This transaction manager can be used as a replacement for the
- * {@link org.springframework.transaction.jta.JtaTransactionManager} in the single
- * resource case, as it does not require a container that supports JTA, typically
- * in combination with a locally defined JDBC {@code DataSource} (for example, a Hikari
- * connection pool). Switching between this local strategy and a JTA environment
- * is just a matter of configuration!
+ * <h3>事务同步：</h3>
+ * <ul>
+ * <li><b>同步注册</b>：支持事务同步的注册和回调</li>
+ * <li><b>资源清理</b>：在事务完成后正确清理资源</li>
+ * <li><b>异常处理</b>：正确处理异常并决定提交或回滚</li>
+ * </ul>
  *
- * <p>As of 4.3.4, this transaction manager triggers flush callbacks on registered
- * transaction synchronizations (if synchronization is generally active), assuming
- * resources operating on the underlying JDBC {@code Connection}. This allows for
- * setup analogous to {@code JtaTransactionManager}, in particular with respect to
- * lazily registered ORM resources (for example, a Hibernate {@code Session}).
+ * <h3>重要配置：</h3>
+ * <ul>
+ * <li><b>DataSource</b>：要管理的JDBC数据源</li>
+ * <li><b>nestedTransactionAllowed</b>：是否允许嵌套事务（默认true）</li>
+ * <li><b>enforceReadOnly</b>：是否强制只读事务</li>
+ * <li><b>defaultReadOnly</b>：默认只读状态</li>
+ * </ul>
  *
- * <p><b>NOTE: As of 5.3, {@link org.springframework.jdbc.support.JdbcTransactionManager}
- * is available as an extended subclass which includes commit/rollback exception
- * translation, aligned with {@link org.springframework.jdbc.core.JdbcTemplate}.</b>
+ * <h3>嵌套事务支持：</h3>
+ * <p>通过JDBC {@link java.sql.Savepoint} 机制支持嵌套事务。在支持savepoint的JDBC驱动上
+ * （如Oracle JDBC驱动）嵌套事务可以无限制地工作。
+ *
+ * <h3>与JTA的对比：</h3>
+ * <p>这个事务管理器可以作为单资源场景下 {@link org.springframework.transaction.jta.JtaTransactionManager}
+ * 的替代方案，因为它不需要支持JTA的容器，通常与本地定义的JDBC {@code DataSource}（如Hikari连接池）结合使用。
  *
  * @author Juergen Hoeller
  * @since 02.05.2003

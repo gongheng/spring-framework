@@ -44,53 +44,138 @@ import org.jspecify.annotations.Nullable;
 public interface TransactionDefinition {
 
 	/**
-	 * Support a current transaction; create a new one if none exists.
-	 * Analogous to the EJB transaction attribute of the same name.
-	 * <p>This is typically the default setting of a transaction definition
-	 * and typically defines a transaction synchronization scope.
+	 * 【支持当前事务，如果不存在则创建新事务】
+	 *
+	 * <h3>行为描述：</h3>
+	 * <ul>
+	 * <li><b>有现有事务</b>：加入现有事务，成为其一部分</li>
+	 * <li><b>无现有事务</b>：创建新事务</li>
+	 * <li><b>最常用传播行为</b>：这是默认的传播行为</li>
+	 * </ul>
+	 *
+	 * <h3>使用场景：</h3>
+	 * <pre>
+	 * @Service
+	 * public class OrderService {
+	 *
+	 *     @Transactional(propagation = Propagation.REQUIRED)
+	 *     public void createOrder(Order order) {
+	 *         // 如果调用方已有事务，加入该事务
+	 *         // 否则创建新事务
+	 *         orderRepository.save(order);
+	 *         inventoryService.updateStock(order);
+	 *     }
+	 * }
+	 * </pre>
+	 *
+	 * <h3>事务边界：</h3>
+	 * <p>这是最常用的传播行为，通常定义了事务同步范围。
+	 * 同一事务同步范围内的所有操作要么全部成功，要么全部回滚。
 	 */
 	int PROPAGATION_REQUIRED = 0;
 
 	/**
-	 * Support a current transaction; execute non-transactionally if none exists.
-	 * Analogous to the EJB transaction attribute of the same name.
-	 * <p><b>NOTE:</b> For transaction managers with transaction synchronization,
-	 * {@code PROPAGATION_SUPPORTS} is slightly different from no transaction
-	 * at all, as it defines a transaction scope that synchronization might apply to.
-	 * As a consequence, the same resources (a JDBC {@code Connection}, a
-	 * Hibernate {@code Session}, etc) will be shared for the entire specified
-	 * scope. Note that the exact behavior depends on the actual synchronization
-	 * configuration of the transaction manager.
-	 * <p>In general, use {@code PROPAGATION_SUPPORTS} with care. In particular, do
-	 * not rely on {@code PROPAGATION_REQUIRED} or {@code PROPAGATION_REQUIRES_NEW}
-	 * <i>within</i> a {@code PROPAGATION_SUPPORTS} scope (which may lead to
-	 * synchronization conflicts at runtime). If such nesting is unavoidable, make sure
-	 * to configure your transaction manager appropriately (typically switching to
-	 * "synchronization on actual transaction").
+	 * 【支持当前事务，如果不存在则以非事务方式执行】
+	 *
+	 * <h3>行为描述：</h3>
+	 * <ul>
+	 * <li><b>有现有事务</b>：加入现有事务，成为其一部分</li>
+	 * <li><b>无现有事务</b>：以非事务方式执行</li>
+	 * <li><b>特殊事务作用域</b>：即使没有实际事务，也会定义一个事务同步范围</li>
+	 * </ul>
+	 *
+	 * <h3>使用场景：</h3>
+	 * <pre>
+	 * @Service
+	 * public class QueryService {
+	 *
+	 *     @Transactional(propagation = Propagation.SUPPORTS)
+	 *     public User findUserById(Long id) {
+	 *         // 如果调用方有事务，加入该事务
+	 *         // 如果调用方无事务，以非事务方式执行（适用于只读查询）
+	 *         return userRepository.findById(id);
+	 *     }
+	 * }
+	 * </pre>
+	 *
+	 * <h3>注意事项：</h3>
+	 * <p><b>注意：</b>对于具有事务同步的事务管理器，{@code PROPAGATION_SUPPORTS}与完全没有事务略有不同，
+	 * 因为它定义了一个事务同步可能应用的范围。因此，相同的资源（JDBC {@code Connection}、
+	 * Hibernate {@code Session}等）将在整个指定范围内共享。具体行为取决于事务管理器的实际同步配置。
+	 *
+	 * <p><b>特别小心：</b>在{@code PROPAGATION_SUPPORTS}范围内，不要依赖
+	 * {@code PROPAGATION_REQUIRED}或{@code PROPAGATION_REQUIRES_NEW} <i>内部</i>的事务
+	 * （这可能导致运行时的同步冲突）。如果这种嵌套不可避免，请确保适当配置事务管理器
+	 * （通常切换到"在实际事务上同步"）。
+	 *
 	 * @see org.springframework.transaction.support.AbstractPlatformTransactionManager#setTransactionSynchronization
 	 * @see org.springframework.transaction.support.AbstractPlatformTransactionManager#SYNCHRONIZATION_ON_ACTUAL_TRANSACTION
 	 */
 	int PROPAGATION_SUPPORTS = 1;
 
 	/**
-	 * Support a current transaction; throw an exception if no current transaction
-	 * exists. Analogous to the EJB transaction attribute of the same name.
-	 * <p>Note that transaction synchronization within a {@code PROPAGATION_MANDATORY}
-	 * scope will always be driven by the surrounding transaction.
+	 * 【支持当前事务，如果不存在则抛出异常】
+	 *
+	 * <h3>行为描述：</h3>
+	 * <ul>
+	 * <li><b>有现有事务</b>：加入现有事务，成为其一部分</li>
+	 * <li><b>无现有事务</b>：抛出IllegalTransactionStateException异常</li>
+	 * <li><b>强制事务环境</b>：确保方法必须在事务中执行</li>
+	 * </ul>
+	 *
+	 * <h3>使用场景：</h3>
+	 * <pre>
+	 * @Service
+	 * public class PaymentService {
+	 *
+	 *     @Transactional(propagation = Propagation.MANDATORY)
+	 *     public void processPayment(Payment payment) {
+	 *         // 必须在事务环境中执行，否则抛出异常
+	 *         // 用于确保关键操作（如支付）必须在事务中进行
+	 *         paymentRepository.process(payment);
+	 *     }
+	 * }
+	 * </pre>
+	 *
+	 * <h3>注意事项：</h3>
+	 * <p>注意：{@code PROPAGATION_MANDATORY}范围内的事务同步总是由周围事务驱动。
+	 * 这个传播行为通常用于强制要求事务环境的关键业务操作，如果不在事务中调用会立即失败。
 	 */
 	int PROPAGATION_MANDATORY = 2;
 
 	/**
-	 * Create a new transaction, suspending the current transaction if one exists.
-	 * Analogous to the EJB transaction attribute of the same name.
-	 * <p><b>NOTE:</b> Actual transaction suspension will not work out-of-the-box
-	 * on all transaction managers. This in particular applies to
-	 * {@link org.springframework.transaction.jta.JtaTransactionManager},
-	 * which requires the {@code jakarta.transaction.TransactionManager} to be
-	 * made available to it (which is server-specific in standard Jakarta EE).
-	 * <p>A {@code PROPAGATION_REQUIRES_NEW} scope always defines its own
-	 * transaction synchronizations. Existing synchronizations will be suspended
-	 * and resumed appropriately.
+	 * 【创建新事务，如果存在当前事务则挂起当前事务】
+	 *
+	 * <h3>行为描述：</h3>
+	 * <ul>
+	 * <li><b>有现有事务</b>：挂起当前事务，创建新事务</li>
+	 * <li><b>无现有事务</b>：创建新事务</li>
+	 * <li><b>独立事务</b>：新事务与挂起的事务完全独立</li>
+	 * <li><b>事务隔离</b>：新事务的提交/回滚不影响挂起的事务</li>
+	 * </ul>
+	 *
+	 * <h3>使用场景：</h3>
+	 * <pre>
+	 * @Service
+	 * public class AuditService {
+	 *
+	 *     @Transactional(propagation = Propagation.REQUIRES_NEW)
+	 *     public void logAudit(AuditLog log) {
+	 *         // 无论调用方是否有事务，都创建新事务
+	 *         // 即使外层事务回滚，审计日志也会被记录
+	 *         auditRepository.save(log);
+	 *     }
+	 * }
+	 * </pre>
+	 *
+	 * <h3>注意事项：</h3>
+	 * <p><b>注意：</b>实际的事务挂起并非在所有事务管理器上都能开箱即用。
+	 * 这特别适用于{@link org.springframework.transaction.jta.JtaTransactionManager}，
+	 * 它需要{@code jakarta.transaction.TransactionManager}可用（这在标准Jakarta EE中是服务器特定的）。
+	 *
+	 * <p>{@code PROPAGATION_REQUIRES_NEW}范围总是定义自己的事务同步。
+	 * 现有的同步将被适当地挂起和恢复。这意味着在新事务中注册的同步回调不会影响挂起的事务。
+	 *
 	 * @see org.springframework.transaction.jta.JtaTransactionManager#setTransactionManager
 	 */
 	int PROPAGATION_REQUIRES_NEW = 3;
@@ -119,23 +204,101 @@ public interface TransactionDefinition {
 	int PROPAGATION_NEVER = 5;
 
 	/**
-	 * Execute within a nested transaction if a current transaction exists,
-	 * behaving like {@link #PROPAGATION_REQUIRED} otherwise. There is no
-	 * analogous feature in EJB.
-	 * <p><b>NOTE:</b> Actual creation of a nested transaction will only work on
-	 * specific transaction managers. Out of the box, this only applies to the JDBC
-	 * {@link org.springframework.jdbc.datasource.DataSourceTransactionManager}
-	 * when working on a JDBC 3.0+ driver. Some JTA providers might support
-	 * nested transactions as well.
+	 * 【如果存在当前事务，则在嵌套事务中执行，否则行为类似REQUIRED】
+	 *
+	 * <h3>行为描述：</h3>
+	 * <ul>
+	 * <li><b>有现有事务</b>：在嵌套事务中执行（基于Savepoint机制）</li>
+	 * <li><b>无现有事务</b>：创建新事务（类似REQUIRED）</li>
+	 * <li><b>嵌套提交</b>：嵌套事务的提交依赖于外层事务</li>
+	 * <li><b>嵌套回滚</b>：嵌套事务可以独立回滚，不影响外层事务</li>
+	 * </ul>
+	 *
+	 * <h3>使用场景：</h3>
+	 * <pre>
+	 * @Service
+	 * public class OrderService {
+	 *
+	 *     @Transactional
+	 *     public void processOrder(Order order) {
+	 *         try {
+	 *             // 主业务逻辑
+	 *             orderRepository.save(order);
+	 *             
+	 *             // 子操作（可能失败但不影响主流程）
+	 *             notificationService.sendNotification(order);
+	 *         } catch (Exception e) {
+	 *             // 即使发送通知失败，订单仍然可以正常提交
+	 *             log.error("Notification failed but order is saved", e);
+	 *         }
+	 *     }
+	 * }
+	 * 
+	 * @Service
+	 * public class NotificationService {
+	 *
+	 *     @Transactional(propagation = Propagation.NESTED)
+	 *     public void sendNotification(Order order) {
+	 *         // 如果发送失败，只回滚这个方法，不影响订单的保存
+	 *         notificationRepository.save(new Notification(order));
+	 *     }
+	 * }
+	 * </pre>
+	 *
+	 * <h3>嵌套事务原理：</h3>
+	 * <pre>
+	 * 主事务开始
+	 *   ↓
+	 * 执行业务操作
+	 *   ↓
+	 * 创建Savepoint（嵌套事务起点）
+	 *   ↓
+	 * 执行嵌套操作
+	 *   ↓
+	 * [如果嵌套操作成功] → 释放Savepoint，继续主事务
+	 * [如果嵌套操作失败] → 回滚到Savepoint，继续主事务
+	 *   ↓
+	 * 主事务提交或回滚
+	 * </pre>
+	 *
+	 * <h3>注意事项：</h3>
+	 * <p><b>注意：</b>嵌套事务的实际创建只在特定事务管理器上有效。
+	 * 开箱即用，这仅适用于在JDBC 3.0+驱动程序上工作的JDBC
+	 * {@link org.springframework.jdbc.datasource.DataSourceTransactionManager}。
+	 * 某些JTA提供者可能也支持嵌套事务。
+	 *
+	 * <p>嵌套事务使用数据库的Savepoint机制实现，因此：
+	 * <ul>
+	 * <li>需要JDBC 3.0+驱动支持</li>
+	 * <li>只对DataSourceTransactionManager有效</li>
+	 * <li>JTA事务管理器通常不支持</li>
+	 * </ul>
+	 *
 	 * @see org.springframework.jdbc.datasource.DataSourceTransactionManager
 	 */
 	int PROPAGATION_NESTED = 6;
 
 
 	/**
-	 * Use the default isolation level of the underlying datastore.
-	 * <p>All other levels correspond to the JDBC isolation levels.
-	 * @see java.sql.Connection
+	 * 【使用底层数据存储的默认隔离级别】
+	 *
+	 * <h3>说明：</h3>
+	 * <p>使用数据库的默认隔离级别，通常是READ_COMMITTED或REPEATABLE_READ，
+	 * 具体取决于数据库的类型和配置。
+	 *
+	 * <h3>其他隔离级别：</h3>
+	 * <p>所有其他隔离级别都对应JDBC的隔离级别常量：
+	 * <ul>
+	 * <li>{@link #ISOLATION_READ_UNCOMMITTED} - 读未提交</li>
+	 * <li>{@link #ISOLATION_READ_COMMITTED} - 读已提交</li>
+	 * <li>{@link #ISOLATION_REPEATABLE_READ} - 可重复读</li>
+	 * <li>{@link #ISOLATION_SERIALIZABLE} - 串行化</li>
+	 * </ul>
+	 *
+	 * @see java.sql.Connection#TRANSACTION_READ_UNCOMMITTED
+	 * @see java.sql.Connection#TRANSACTION_READ_COMMITTED
+	 * @see java.sql.Connection#TRANSACTION_REPEATABLE_READ
+	 * @see java.sql.Connection#TRANSACTION_SERIALIZABLE
 	 */
 	int ISOLATION_DEFAULT = -1;
 

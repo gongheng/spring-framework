@@ -586,42 +586,42 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 			StartupStep contextRefresh = this.applicationStartup.start("spring.context.refresh");
 
-			// Prepare this context for refreshing.
+			// 1. 准备刷新容器：设置启动时间、激活标志和初始化属性源
 			prepareRefresh();
 
-			// Tell the subclass to refresh the internal bean factory.
+			// 2. 获取新的Bean工厂：创建并刷新内部的Bean工厂（加载Bean定义）
 			ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
 
-			// Prepare the bean factory for use in this context.
+			// 3. 准备Bean工厂：设置类加载器、后置处理器、依赖注入等基础配置
 			prepareBeanFactory(beanFactory);
 
 			try {
-				// Allows post-processing of the bean factory in context subclasses.
+				// 4. 后处理Bean工厂：允许子类对Bean工厂进行额外的自定义处理
 				postProcessBeanFactory(beanFactory);
 
 				StartupStep beanPostProcess = this.applicationStartup.start("spring.context.beans.post-process");
-				// Invoke factory processors registered as beans in the context.
+				// 5. 调用Bean工厂后置处理器：处理配置类、扫描Bean定义等（如@Configuration、@ComponentScan）
 				invokeBeanFactoryPostProcessors(beanFactory);
-				// Register bean processors that intercept bean creation.
+				// 6. 注册Bean后置处理器：注册拦截Bean创建的处理器（如AOP、@Autowired等）
 				registerBeanPostProcessors(beanFactory);
 				beanPostProcess.end();
 
-				// Initialize message source for this context.
+				// 7. 初始化消息源：用于国际化（i18n）支持
 				initMessageSource();
 
-				// Initialize event multicaster for this context.
+				// 8. 初始化事件广播器：用于发布和广播应用事件
 				initApplicationEventMulticaster();
 
-				// Initialize other special beans in specific context subclasses.
+				// 9. 刷新（子类特殊Bean初始化）：允许子类初始化特殊的Bean（如Web环境的主题源等）
 				onRefresh();
 
-				// Check for listener beans and register them.
+				// 10. 注册监听器：将所有监听器Bean注册到事件广播器
 				registerListeners();
 
-				// Instantiate all remaining (non-lazy-init) singletons.
+				// 11. 完成Bean工厂初始化：【核心步骤】实例化所有剩余的非懒加载单例Bean
 				finishBeanFactoryInitialization(beanFactory);
 
-				// Last step: publish corresponding event.
+				// 12. 完成刷新：发布容器刷新完成事件，启动生命周期Bean
 				finishRefresh();
 			}
 
@@ -788,11 +788,18 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	}
 
 	/**
-	 * Instantiate and invoke all registered BeanFactoryPostProcessor beans,
-	 * respecting explicit order if given.
+	 * 【Bean工厂后置处理器调用】实例化并调用所有注册的BeanFactoryPostProcessor
+	 * 
+	 * 这是Spring容器启动的关键步骤，主要用于：
+	 * 1. 处理配置类（ConfigurationClassPostProcessor）
+	 * 2. 修改Bean定义（如属性占位符解析）
+	 * 3. 在Bean实例化前对BeanFactory进行自定义修改
+	 * 
 	 * <p>Must be called before singleton instantiation.
 	 */
 	protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
+		// 【核心委托】委托给PostProcessorRegistrationDelegate执行复杂的后置处理器调用逻辑
+		// 这里会按优先级顺序调用各种BeanFactoryPostProcessor，其中最重要的是ConfigurationClassPostProcessor
 		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
 
 		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
@@ -936,42 +943,49 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	}
 
 	/**
-	 * Finish the initialization of this context's bean factory,
-	 * initializing all remaining singleton beans.
+	 * 【完成Bean工厂初始化】实例化所有剩余的单例Bean
+	 * 
+	 * 这是Spring容器启动过程中最重要的步骤之一，负责：
+	 * 1. 初始化各种基础设施组件（转换服务、执行器等）
+	 * 2. 实例化所有非懒加载的单例Bean
+	 * 3. 触发SmartInitializingSingleton回调
+	 * 
+	 * 此方法完成后，容器的所有单例Bean都将被实例化和初始化
 	 */
 	@SuppressWarnings("unchecked")
 	protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
-		// Mark current thread for singleton instantiation with applied bootstrap locking.
+		// 【准备单例引导】标记当前线程为单例实例化线程
 		beanFactory.prepareSingletonBootstrap();
 
-		// Initialize bootstrap executor for this context.
+		// 【初始化引导执行器】如果容器中存在引导执行器Bean，则进行初始化
 		if (beanFactory.containsBean(BOOTSTRAP_EXECUTOR_BEAN_NAME) &&
 				beanFactory.isTypeMatch(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class)) {
 			beanFactory.setBootstrapExecutor(
 					beanFactory.getBean(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class));
 		}
 
-		// Initialize conversion service for this context.
+		// 【初始化类型转换服务】设置Spring的类型转换服务，用于属性编辑和类型转换
 		if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
 				beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
 			beanFactory.setConversionService(
 					beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
 		}
 
-		// Register a default embedded value resolver if no BeanFactoryPostProcessor
-		// (such as a PropertySourcesPlaceholderConfigurer bean) registered any before:
-		// at this point, primarily for resolution in annotation attribute values.
+		// 【注册嵌入式值解析器】如果没有自定义的值解析器，注册默认的占位符解析器
+		// 主要用于解析注解属性值中的占位符（如${property.name}）
 		if (!beanFactory.hasEmbeddedValueResolver()) {
 			beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
 		}
 
-		// Call BeanFactoryInitializer beans early to allow for initializing specific other beans early.
+		// 【调用Bean工厂初始化器】提前调用BeanFactoryInitializer的初始化方法
+		// 允许在常规Bean实例化之前初始化特定的Bean
 		String[] initializerNames = beanFactory.getBeanNamesForType(BeanFactoryInitializer.class, false, false);
 		for (String initializerName : initializerNames) {
 			beanFactory.getBean(initializerName, BeanFactoryInitializer.class).initialize(beanFactory);
 		}
 
-		// Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
+		// 【初始化LoadTimeWeaverAware Bean】提前初始化LoadTimeWeaverAware接口的实现类
+		// 允许在类加载时进行织入操作（如AOP）
 		String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
 		for (String weaverAwareName : weaverAwareNames) {
 			try {
@@ -985,13 +999,15 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			}
 		}
 
-		// Stop using the temporary ClassLoader for type matching.
+		// 【停止使用临时类加载器】不再使用临时类加载器进行类型匹配
 		beanFactory.setTempClassLoader(null);
 
-		// Allow for caching all bean definition metadata, not expecting further changes.
+		// 【冻结Bean定义配置】冻结所有Bean定义元数据，防止后续修改
+		// 此时所有Bean定义都已经确定，可以安全地进行缓存
 		beanFactory.freezeConfiguration();
 
-		// Instantiate all remaining (non-lazy-init) singletons.
+		// 【核心步骤：实例化所有单例Bean】实例化所有剩余的非懒加载单例Bean
+		// 这是整个Spring容器启动过程中最核心、最复杂的步骤
 		beanFactory.preInstantiateSingletons();
 	}
 

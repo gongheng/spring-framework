@@ -31,36 +31,60 @@ import org.springframework.core.OrderComparator;
 import org.springframework.util.Assert;
 
 /**
- * Central delegate that manages resources and transaction synchronizations per thread.
- * To be used by resource management code but not by typical application code.
+ * 【事务同步管理的核心类】管理每个线程的资源绑定和事务同步
  *
- * <p>Supports one resource per key without overwriting, that is, a resource needs
- * to be removed before a new one can be set for the same key.
- * Supports a list of transaction synchronizations if synchronization is active.
+ * <h3>核心职责：</h3>
+ * <ul>
+ * <li><b>资源管理</b>：管理线程级别的资源（如JDBC Connection、Hibernate Session）</li>
+ * <li><b>事务同步</b>：管理事务生命周期中的同步回调</li>
+ * <li><b>线程隔离</b>：使用ThreadLocal实现线程级别的资源隔离</li>
+ * <li><b>事务状态</b>：跟踪当前事务的状态信息</li>
+ * </ul>
  *
- * <p>Resource management code should check for thread-bound resources, for example, JDBC
- * Connections or Hibernate Sessions, via {@code getResource}. Such code is
- * normally not supposed to bind resources to threads, as this is the responsibility
- * of transaction managers. A further option is to lazily bind on first use if
- * transaction synchronization is active, for performing transactions that span
- * an arbitrary number of resources.
+ * <h3>关键特性：</h3>
+ * <pre>
+ * 1. 资源绑定：
+ *    ├─ 每个线程独立的资源存储
+ *    ├─ 按资源键（通常是DataSource）管理资源
+ *    └─ 支持一个键对应一个资源
  *
- * <p>Transaction synchronization must be activated and deactivated by a transaction
- * manager via {@link #initSynchronization()} and {@link #clearSynchronization()}.
- * This is automatically supported by {@link AbstractPlatformTransactionManager},
- * and thus by all standard Spring transaction managers, such as
- * {@link org.springframework.transaction.jta.JtaTransactionManager} and
- * {@link org.springframework.jdbc.datasource.DataSourceTransactionManager}.
+ * 2. 事务同步：
+ *    ├─ 注册事务同步回调
+ *    ├─ 在事务完成时触发回调
+ *    └─ 支持多个同步器按优先级执行
  *
- * <p>Resource management code should only register synchronizations when this
- * manager is active, which can be checked via {@link #isSynchronizationActive};
- * it should perform immediate resource cleanup else. If transaction synchronization
- * isn't active, there is either no current transaction, or the transaction manager
- * doesn't support transaction synchronization.
+ * 3. 事务状态跟踪：
+ *    ├─ 当前事务名称
+ *    ├─ 只读状态
+ *    ├─ 隔离级别
+ *    └─ 实际事务是否激活
+ * </pre>
  *
- * <p>Synchronization is for example used to always return the same resources
- * within a JTA transaction, for example, a JDBC Connection or a Hibernate Session for
- * any given DataSource or SessionFactory, respectively.
+ * <h3>ThreadLocal存储结构：</h3>
+ * <ul>
+ * <li><b>resources</b>：存储事务相关的资源（Connection、Session等）</li>
+ * <li><b>synchronizations</b>：存储事务同步回调</li>
+ * <li><b>currentTransactionName</b>：当前事务名称</li>
+ * <li><b>currentTransactionReadOnly</b>：当前事务只读状态</li>
+ * <li><b>currentTransactionIsolationLevel</b>：当前事务隔离级别</li>
+ * <li><b>actualTransactionActive</b>：实际事务是否激活</li>
+ * </ul>
+ *
+ * <h3>使用场景：</h3>
+ * <ul>
+ * <li><b>资源管理</b>：JDBC Connection、Hibernate Session等资源的线程绑定</li>
+ * <li><b>事务同步</b>：在事务完成时执行清理、刷新等操作</li>
+ * <li><b>跨资源协调</b>：在单个事务中协调多个资源的使用</li>
+ * </ul>
+ *
+ * <h3>与事务管理器的关系：</h3>
+ * <p>事务管理器（如DataSourceTransactionManager）通过这个类来：
+ * <ul>
+ * <li>绑定资源（如JDBC Connection）到当前线程</li>
+ * <li>注册事务同步回调</li>
+ * <li>在事务完成时触发同步回调</li>
+ * <li>清理线程绑定的资源</li>
+ * </ul>
  *
  * @author Juergen Hoeller
  * @since 02.06.2003

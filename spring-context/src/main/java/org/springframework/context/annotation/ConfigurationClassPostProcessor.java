@@ -387,6 +387,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 	 * {@link Configuration} classes.
 	 */
 	public void processConfigBeanDefinitions(BeanDefinitionRegistry registry) {
+		// 1. 【扫描候选配置类】收集所有候选的配置类（带有@Configuration注解或相关标记）
 		List<BeanDefinitionHolder> configCandidates = new ArrayList<>();
 		String[] candidateNames = registry.getBeanDefinitionNames();
 
@@ -402,12 +403,12 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 			}
 		}
 
-		// Return immediately if no @Configuration classes were found
+		// 如果没有找到@Configuration类，直接返回
 		if (configCandidates.isEmpty()) {
 			return;
 		}
 
-		// Sort by previously determined @Order value, if applicable
+		// 2. 【排序】根据@Order注解对配置类进行排序
 		configCandidates.sort((bd1, bd2) -> {
 			int i1 = ConfigurationClassUtils.getOrder(bd1.getBeanDefinition());
 			int i2 = ConfigurationClassUtils.getOrder(bd2.getBeanDefinition());
@@ -440,7 +441,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 			this.environment = new StandardEnvironment();
 		}
 
-		// Parse each @Configuration class
+		// 3. 【创建配置类解析器】用于解析@Configuration类
 		ConfigurationClassParser parser = new ConfigurationClassParser(
 				this.metadataReaderFactory, this.problemReporter, this.environment,
 				this.resourceLoader, this.componentScanBeanNameGenerator, registry);
@@ -449,13 +450,14 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 		Set<ConfigurationClass> alreadyParsed = CollectionUtils.newHashSet(configCandidates.size());
 		do {
 			StartupStep processConfig = this.applicationStartup.start("spring.context.config-classes.parse");
+			// 4. 【解析配置类】解析每个@Configuration类（包括@ComponentScan、@Import、@Bean等）
 			parser.parse(candidates);
 			parser.validate();
 
 			Set<ConfigurationClass> configClasses = new LinkedHashSet<>(parser.getConfigurationClasses());
 			configClasses.removeAll(alreadyParsed);
 
-			// Read the model and create bean definitions based on its content
+			// 5. 【注册Bean定义】根据解析结果注册Bean定义（主要是@Bean方法定义的Bean）
 			if (this.reader == null) {
 				this.reader = new ConfigurationClassBeanDefinitionReader(
 						registry, this.sourceExtractor, this.resourceLoader, this.environment,
@@ -468,6 +470,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 			alreadyParsed.addAll(configClasses);
 			processConfig.tag("classCount", () -> String.valueOf(configClasses.size())).end();
 
+			// 6. 【循环处理新发现的配置类】如果在解析过程中发现了新的配置类，继续处理
 			candidates.clear();
 			if (registry.getBeanDefinitionCount() > candidateNames.length) {
 				String[] newCandidateNames = registry.getBeanDefinitionNames();

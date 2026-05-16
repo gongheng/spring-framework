@@ -83,21 +83,33 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	final Lock singletonLock = new ReentrantLock();
 
 	/** Cache of singleton objects: bean name to bean instance. */
+	// 【一级缓存】完整的单例Bean对象缓存
+	// 存储的是完全初始化完成的单例Bean对象
+	// 当Bean完全初始化后，会存储在这个缓存中
 	private final Map<String, Object> singletonObjects = new ConcurrentHashMap<>(256);
 
 	/** Creation-time registry of singleton factories: bean name to ObjectFactory. */
+	// 【三级缓存】Bean工厂对象缓存
+	// 存储的是ObjectFactory，用于创建早期Bean引用
+	// 这是解决循环依赖的关键，通过工厂可以返回原始Bean或代理对象
 	private final Map<String, ObjectFactory<?>> singletonFactories = new ConcurrentHashMap<>(16);
 
 	/** Custom callbacks for singleton creation/registration. */
 	private final Map<String, Consumer<Object>> singletonCallbacks = new ConcurrentHashMap<>(16);
 
 	/** Cache of early singleton objects: bean name to bean instance. */
+	// 【二级缓存】提前暴露的Bean对象缓存
+	// 存储的是半成品的Bean实例（尚未完全初始化）
+	// 主要用于解决循环依赖问题
 	private final Map<String, Object> earlySingletonObjects = new ConcurrentHashMap<>(16);
 
 	/** Set of registered singletons, containing the bean names in registration order. */
 	private final Set<String> registeredSingletons = Collections.synchronizedSet(new LinkedHashSet<>(256));
 
 	/** Names of beans that are currently in creation. */
+	// 【循环依赖检测集合】正在创建中的Bean名称集合
+	// 用于检测循环依赖问题，当一个Bean正在创建时，会将其名称添加到这个集合中
+	// 如果在创建过程中需要再次创建同一个Bean，就会抛出BeanCurrentlyInCreationException异常
 	private final Set<String> singletonsCurrentlyInCreation = ConcurrentHashMap.newKeySet(16);
 
 	/** Names of beans currently excluded from in creation checks. */
@@ -173,17 +185,32 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	}
 
 	/**
-	 * Add the given singleton factory for building the specified singleton
-	 * if necessary.
-	 * <p>To be called for early exposure purposes, for example, to be able to
-	 * resolve circular references.
+	 * 【添加Bean工厂到三级缓存】将Bean工厂添加到三级缓存中，用于提前暴露Bean引用
+	 *
+	 * 这个方法是解决循环依赖的关键步骤之一，在Bean实例化后、属性注入前被调用：
+	 *
+	 * 循环依赖解决场景：
+	 * 假设A依赖B，B依赖A：
+	 * 1. 创建A，实例化A后，将A的ObjectFactory放入三级缓存
+	 * 2. A开始属性注入，发现需要B
+	 * 3. 创建B，实例化B后，将B的ObjectFactory放入三级缓存
+	 * 4. B开始属性注入，发现需要A
+	 * 5. 从三级缓存中获取A的ObjectFactory，调用getObject()获取A的早期引用
+	 * 6. 将A的早期引用放入二级缓存，从三级缓存移除
+	 * 7. B完成属性注入和初始化，放入一级缓存
+	 * 8. A继续完成属性注入和初始化，放入一级缓存
+	 *
 	 * @param beanName the name of the bean
 	 * @param singletonFactory the factory for the singleton object
 	 */
 	protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
 		Assert.notNull(singletonFactory, "Singleton factory must not be null");
+		// 【放入三级缓存】将Bean工厂添加到三级缓存
+		// 这个工厂可以在需要时返回原始Bean或AOP代理对象
 		this.singletonFactories.put(beanName, singletonFactory);
+		// 【清理二级缓存】确保二级缓存中没有该Bean的旧引用
 		this.earlySingletonObjects.remove(beanName);
+		// 【标记已注册】将Bean名称添加到已注册集合
 		this.registeredSingletons.add(beanName);
 	}
 
@@ -198,18 +225,29 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	}
 
 	/**
-	 * Return the (raw) singleton object registered under the given name.
-	 * <p>Checks already instantiated singletons and also allows for an early
-	 * reference to a currently created singleton (resolving a circular reference).
+	 * 【三级缓存获取Bean的核心方法】从缓存中获取单例Bean
+	 *
+	 * 这个方法实现了Spring的三级缓存机制，是解决循环依赖的核心：
+	 * 1. 首先从一级缓存获取完整的Bean
+	 * 2. 如果一级缓存没有且Bean正在创建中，从二级缓存获取半成品Bean
+	 * 3. 如果二级缓存也没有且允许早期引用，从三级缓存获取Bean工厂并创建Bean
+	 *
 	 * @param beanName the name of the bean to look for
 	 * @param allowEarlyReference whether early references should be created or not
 	 * @return the registered singleton object, or {@code null} if none found
 	 */
 	protected @Nullable Object getSingleton(String beanName, boolean allowEarlyReference) {
-		// Quick check for existing instance without full singleton lock.
+		// 【第一步：检查一级缓存】快速检查完整的单例Bean
+		// 无需完整的单例锁即可快速访问
 		Object singletonObject = this.singletonObjects.get(beanName);
+
+		// 【第二步：检查二级缓存】如果一级缓存没有且Bean正在创建中，检查二级缓存
+		// isSingletonCurrentlyInCreation()是循环依赖检测的关键
 		if (singletonObject == null && isSingletonCurrentlyInCreation(beanName)) {
 			singletonObject = this.earlySingletonObjects.get(beanName);
+
+			// 【第三步：检查三级缓存】如果二级缓存也没有且允许早期引用，检查三级缓存
+			// 这里是解决循环依赖的核心：通过ObjectFactory获取早期Bean引用
 			if (singletonObject == null && allowEarlyReference) {
 				if (!this.singletonLock.tryLock()) {
 					// Avoid early singleton inference outside of original creation thread.
@@ -531,24 +569,56 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 	}
 
 	/**
-	 * Callback before singleton creation.
-	 * <p>The default implementation registers the singleton as currently in creation.
+	 * 【Bean创建前的回调】在Bean创建前进行循环依赖检测
+	 *
+	 * 循环依赖检测机制：
+	 * 1. 将Bean名称添加到singletonsCurrentlyInCreation集合中，标记为"正在创建"
+	 * 2. 如果添加失败（返回false），说明该Bean已经在创建中，检测到循环依赖
+	 * 3. 抛出BeanCurrentlyInCreationException异常
+	 *
+	 * 检测时机：
+	 * - 在getSingleton(String, ObjectFactory)方法中调用
+	 * - 在Bean创建流程的最开始调用
+	 *
+	 * 异常场景：
+	 * - 构造器循环依赖：A的构造器需要B，B的构造器需要A，无法通过三级缓存解决
+	 * - 原型Bean的循环依赖：Spring不处理原型Bean的循环依赖
+	 * - 复杂的多层循环依赖：超过了Spring处理能力的循环依赖
+	 *
+	 * 注意：Setter注入的循环依赖会触发这个检测，但可以通过三级缓存机制解决
+	 *
 	 * @param beanName the name of the singleton about to be created
 	 * @see #isSingletonCurrentlyInCreation
 	 */
 	protected void beforeSingletonCreation(String beanName) {
+		// 【循环依赖检测核心逻辑】
+		// 如果Bean不在排除列表中，且添加到"正在创建"集合失败（返回false），说明存在循环依赖
 		if (!this.inCreationCheckExclusions.contains(beanName) && !this.singletonsCurrentlyInCreation.add(beanName)) {
 			throw new BeanCurrentlyInCreationException(beanName);
 		}
 	}
 
 	/**
-	 * Callback after singleton creation.
-	 * <p>The default implementation marks the singleton as not in creation anymore.
+	 * 【Bean创建后的回调】在Bean创建完成后清理创建状态
+	 *
+	 * 创建完成处理：
+	 * 1. 将Bean名称从singletonsCurrentlyInCreation集合中移除
+	 * 2. 标记Bean已经完成创建，不再处于"正在创建"状态
+	 *
+	 * 调用时机：
+	 * - 在Bean完全初始化完成后调用
+	 * - 在finally块中确保无论成功或异常都会执行
+	 *
+	 * 异常处理：
+	 * - 如果移除失败（返回false），说明Bean不在创建状态
+	 * - 这通常表示程序逻辑错误，抛出IllegalStateException
+	 *
 	 * @param beanName the name of the singleton that has been created
 	 * @see #isSingletonCurrentlyInCreation
 	 */
 	protected void afterSingletonCreation(String beanName) {
+		// 【清理创建状态】将Bean从"正在创建"集合中移除
+		// 如果移除失败，说明该Bean不在创建状态，抛出异常
 		if (!this.inCreationCheckExclusions.contains(beanName) && !this.singletonsCurrentlyInCreation.remove(beanName)) {
 			throw new IllegalStateException("Singleton '" + beanName + "' isn't currently in creation");
 		}

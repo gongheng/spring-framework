@@ -361,27 +361,39 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 		final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
 		if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager cpptm)) {
+			// 【标准事务边界处理】使用getTransaction和commit/rollback调用
 			// Standard transaction demarcation with getTransaction and commit/rollback calls.
+
+			// 【第一步：创建事务（如果必要）】
+			// 根据传播行为决定是否需要创建新事务
 			TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
 
 			Object retVal;
 			try {
+				// 【第二步：执行目标方法】
 				// This is an around advice: Invoke the next interceptor in the chain.
 				// This will normally result in a target object being invoked.
 				retVal = invocation.proceedWithInvocation();
 			}
 			catch (Throwable ex) {
+				// 【第三步：异常处理】
 				// target invocation exception
+				// 根据异常类型和回滚规则决定是否回滚事务
 				completeTransactionAfterThrowing(txInfo, invocation, ex);
 				throw ex;
 			}
 			finally {
+				// 【第四步：清理事务信息】
+				// 无论成功或失败都执行清理
 				cleanupTransactionInfo(txInfo);
 			}
 
+			// 【第五步：特殊返回值处理】
+			// 处理Future和Vavr Try等特殊返回类型
 			if (retVal != null && txAttr != null) {
 				TransactionStatus status = txInfo.getTransactionStatus();
 				if (status != null) {
+					// 处理Future返回值
 					if (retVal instanceof Future<?> future && future.isDone()) {
 						try {
 							future.get();
@@ -389,6 +401,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 						catch (ExecutionException ex) {
 							Throwable cause = ex.getCause();
 							Assert.state(cause != null, "Cause must not be null");
+							// 根据回滚规则设置事务为仅回滚
 							if (txAttr.rollbackOn(cause)) {
 								invocation.onRollback(cause, status);
 								status.setRollbackOnly();
@@ -398,6 +411,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 							Thread.currentThread().interrupt();
 						}
 					}
+					// 处理Vavr Try返回值
 					else if (VAVR_PRESENT && VavrDelegate.isVavrTry(retVal)) {
 						// Set rollback-only in case of Vavr failure matching our rollback rules...
 						retVal = VavrDelegate.evaluateTryFailure(invocation, retVal, txAttr, status);
@@ -405,6 +419,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 				}
 			}
 
+			// 【第六步：提交事务】
+			// 如果没有异常且事务未被标记为仅回滚，则提交事务
 			commitTransactionAfterReturning(txInfo);
 			return retVal;
 		}

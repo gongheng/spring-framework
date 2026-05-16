@@ -544,26 +544,79 @@ public class AutowiredAnnotationBeanPostProcessor implements SmartInstantiationA
 		return metadata;
 	}
 
+	/**
+	 * 【构建@Autowired注解元数据的核心方法】扫描类中的所有自动装配注入点
+	 *
+	 * <h3>核心职责：</h3>
+	 * <p>扫描指定类及其父类的所有字段和方法，找出标记了@Autowired、@Value、@Inject等注解的注入点，
+	 * 构建完整的注入元数据对象。这个过程在Bean创建时执行，用于确定需要注入的依赖。
+	 *
+	 * <h3>扫描流程：</h3>
+	 * <pre>
+	 * Step 1: 快速检查 - 检查类是否是候选类（是否有相关注解）
+	 * Step 2: 字段扫描 - 扫描所有字段，查找@Autowired注解
+	 * Step 3: 方法扫描 - 扫描所有方法，查找@Autowired注解
+	 * Step 4: 父类递归 - 递归处理父类的字段和方法
+	 * Step 5: 元数据构建 - 构建InjectionMetadata对象
+	 * </pre>
+	 *
+	 * <h3>支持的注解类型：</h3>
+	 * <ul>
+	 * <li>@Autowired - Spring标准注解</li>
+	 * <li>@Value - 配置值注入注解</li>
+	 * <li>@Inject - JSR-330标准注解</li>
+	 * </ul>
+	 *
+	 * <h3>注入点类型：</h3>
+	 * <ul>
+	 * <li>字段注入 - 直接注入到字段</li>
+	 * <li>方法注入 - 通过setter方法或其他配置方法注入</li>
+	 * <li>构造器注入 - 通过构造器参数注入（在实例化阶段处理）</li>
+	 * </ul>
+	 *
+	 * <h3>限制条件：</h3>
+	 * <ul>
+	 * <li>不支持static字段和方法</li>
+	 * <li>@Autowired方法必须有参数</li>
+	 * <li>桥接方法会被忽略</li>
+	 * </ul>
+	 *
+	 * @param clazz 要扫描的类
+	 * @return 注入元数据对象，包含所有注入点信息
+	 */
 	private InjectionMetadata buildAutowiringMetadata(Class<?> clazz) {
+		// 【步骤1】快速检查 - 检查类是否是候选类
+		// 如果类中没有相关的注解，直接返回空元数据，避免不必要的扫描
 		if (!AnnotationUtils.isCandidateClass(clazz, this.autowiredAnnotationTypes)) {
 			return InjectionMetadata.EMPTY;
 		}
 
+		// 创建注入点列表，用于存储所有扫描到的注入点
 		final List<InjectionMetadata.InjectedElement> elements = new ArrayList<>();
+		// 获取用户定义的类（处理CGLIB代理的情况）
 		Class<?> targetClass = ClassUtils.getUserClass(clazz);
 
+		// 【步骤2】递归扫描类层次结构（从当前类到Object类）
 		do {
+			// 创建字段注入点列表
 			final List<InjectionMetadata.InjectedElement> fieldElements = new ArrayList<>();
+			
+			// 【字段扫描】扫描当前类的所有字段
 			ReflectionUtils.doWithLocalFields(targetClass, field -> {
+				// 查找字段上的自动装配注解（@Autowired、@Value、@Inject等）
 				MergedAnnotation<?> ann = findAutowiredAnnotation(field);
 				if (ann != null) {
+					// 【限制1】不支持静态字段的自动装配
+					// 静态字段属于类级别，而不是实例级别，不应该通过实例依赖注入
 					if (Modifier.isStatic(field.getModifiers())) {
 						if (logger.isInfoEnabled()) {
 							logger.info("Autowired annotation is not supported on static fields: " + field);
 						}
 						return;
 					}
+					// 确定依赖是否必需（@Autowired的required属性，默认为true）
 					boolean required = determineRequiredStatus(ann);
+					// 创建字段注入点元素并添加到列表
 					fieldElements.add(new AutowiredFieldElement(field, required));
 				}
 			});
