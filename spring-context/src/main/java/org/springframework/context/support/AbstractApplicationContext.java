@@ -600,7 +600,35 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 				postProcessBeanFactory(beanFactory);
 
 				StartupStep beanPostProcess = this.applicationStartup.start("spring.context.beans.post-process");
-				// 5. 调用Bean工厂后置处理器：处理配置类、扫描Bean定义等（如@Configuration、@ComponentScan）
+				// 5. ⭐️ 调用Bean工厂后置处理器：【Bean定义加载的真正入口】
+				//    这里会处理配置类、扫描Bean定义等（如@Configuration、@ComponentScan）
+				//
+				//    调用链路：
+				//    invokeBeanFactoryPostProcessors(beanFactory)
+				//      ↓
+				//    PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors()
+				//      ↓
+				//    ConfigurationClassPostProcessor.postProcessBeanDefinitionRegistry()
+				//      ↓
+				//    ConfigurationClassPostProcessor.processConfigBeanDefinitions()
+				//      ↓
+				//    ConfigurationClassParser.parse() 【解析配置类】
+				//      ↓
+				//    doProcessConfigurationClass() 【处理@ComponentScan等注解】
+				//      ↓
+				//    ComponentScanAnnotationParser.parse() 【解析@ComponentScan注解】
+				//      ↓
+				//    ClassPathBeanDefinitionScanner.doScan() 【扫描包路径】
+				//      ↓
+				//    findCandidateComponents(basePackage) 【查找候选组件】
+				//      ↓
+				//    scanCandidateComponents(basePackage) 【扫描classpath上所有.class文件】
+				//      ↓
+				//    读取.class文件 → 检查注解 → 创建BeanDefinition
+				//      ↓
+				//    registerBeanDefinition() 【注册到BeanFactory】
+				//
+				//    结果：BeanFactory现在包含所有Bean定义！
 				invokeBeanFactoryPostProcessors(beanFactory);
 				// 6. 注册Bean后置处理器：注册拦截Bean创建的处理器（如AOP、@Autowired等）
 				registerBeanPostProcessors(beanFactory);
@@ -713,6 +741,36 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 	/**
 	 * Tell the subclass to refresh the internal bean factory.
+	 *
+	 * <p><b>模板方法模式 - 获取刷新后的BeanFactory：</b>
+	 * <pre>
+	 * 调用时机：
+	 * refresh()方法的第2步（第593行）
+	 *
+	 * 调用链路：
+	 * obtainFreshBeanFactory()
+	 *   ↓
+	 * refreshBeanFactory() 【抽象方法调用，第721行】
+	 *   ↓
+	 * 具体子类实现：
+	 *
+	 * 【SpringBoot场景】GenericApplicationContext.refreshBeanFactory()（第296行）
+	 *   - ✅ 只设置序列化ID：beanFactory.setSerializationId(getId())
+	 *   - ✅ 不重新创建BeanFactory（已在构造函数中创建）
+	 *   - ✅ 防止多次刷新：refreshed.compareAndSet(false, true)
+	 *   - 原因：BeanFactory在构造函数中就已创建好
+	 *
+	 * 【传统Spring场景】AbstractRefreshableApplicationContext.refreshBeanFactory()（第121行）
+	 *   - ✅ 销毁旧的BeanFactory（如果存在）
+	 *   - ✅ 创建新的BeanFactory：createBeanFactory()
+	 *   - ✅ 加载Bean定义：loadBeanDefinitions(beanFactory)
+	 *   - 原因：支持多次刷新，从外部资源（XML等）加载配置
+	 *
+	 * 为什么这样设计？
+	 * - GenericApplicationContext：编程式配置，不需要多次刷新
+	 * - AbstractRefreshableApplicationContext：外部资源配置，支持运行时刷新
+	 * </pre>
+	 *
 	 * @return the fresh BeanFactory instance
 	 * @see #refreshBeanFactory()
 	 * @see #getBeanFactory()

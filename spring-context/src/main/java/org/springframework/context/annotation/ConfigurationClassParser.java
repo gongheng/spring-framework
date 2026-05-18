@@ -170,30 +170,26 @@ class ConfigurationClassParser {
 			BeanDefinition bd = holder.getBeanDefinition();
 			try {
 				ConfigurationClass configClass;
+
 				if (bd instanceof AnnotatedBeanDefinition annotatedBeanDef) {
 					configClass = parse(annotatedBeanDef, holder.getBeanName());
-				}
-				else if (bd instanceof AbstractBeanDefinition abstractBeanDef && abstractBeanDef.hasBeanClass()) {
+				} else if (bd instanceof AbstractBeanDefinition abstractBeanDef && abstractBeanDef.hasBeanClass()) {
 					configClass = parse(abstractBeanDef.getBeanClass(), holder.getBeanName());
-				}
-				else {
+				} else {
 					configClass = parse(bd.getBeanClassName(), holder.getBeanName());
 				}
 
 				// Downgrade to lite (no enhancement) in case of no instance-level @Bean methods.
-				if (!configClass.getMetadata().isAbstract() && !configClass.hasNonStaticBeanMethods() &&
-						ConfigurationClassUtils.CONFIGURATION_CLASS_FULL.equals(
-								bd.getAttribute(ConfigurationClassUtils.CONFIGURATION_CLASS_ATTRIBUTE))) {
-					bd.setAttribute(ConfigurationClassUtils.CONFIGURATION_CLASS_ATTRIBUTE,
-							ConfigurationClassUtils.CONFIGURATION_CLASS_LITE);
+				if (!configClass.getMetadata().isAbstract()
+						&& !configClass.hasNonStaticBeanMethods()
+						&& ConfigurationClassUtils.CONFIGURATION_CLASS_FULL.equals(bd.getAttribute(ConfigurationClassUtils.CONFIGURATION_CLASS_ATTRIBUTE))) {
+
+					bd.setAttribute(ConfigurationClassUtils.CONFIGURATION_CLASS_ATTRIBUTE, ConfigurationClassUtils.CONFIGURATION_CLASS_LITE);
 				}
-			}
-			catch (BeanDefinitionStoreException ex) {
+			} catch (BeanDefinitionStoreException ex) {
 				throw ex;
-			}
-			catch (Throwable ex) {
-				throw new BeanDefinitionStoreException(
-						"Failed to parse configuration class [" + bd.getBeanClassName() + "]", ex);
+			} catch (Throwable ex) {
+				throw new BeanDefinitionStoreException("Failed to parse configuration class [" + bd.getBeanClassName() + "]", ex);
 			}
 		}
 
@@ -201,8 +197,7 @@ class ConfigurationClassParser {
 	}
 
 	private ConfigurationClass parse(AnnotatedBeanDefinition beanDef, String beanName) {
-		ConfigurationClass configClass = new ConfigurationClass(
-				beanDef.getMetadata(), beanName, (beanDef instanceof ScannedGenericBeanDefinition));
+		ConfigurationClass configClass = new ConfigurationClass(beanDef.getMetadata(), beanName, (beanDef instanceof ScannedGenericBeanDefinition));
 		processConfigurationClass(configClass, DEFAULT_EXCLUSION_FILTER);
 		return configClass;
 	}
@@ -258,16 +253,14 @@ class ConfigurationClassParser {
 				}
 				// Otherwise ignore new imported config class; existing non-imported class overrides it.
 				return;
-			}
-			else if (configClass.isScanned()) {
+			} else if (configClass.isScanned()) {
 				String beanName = configClass.getBeanName();
 				if (StringUtils.hasLength(beanName) && this.registry.containsBeanDefinition(beanName)) {
 					this.registry.removeBeanDefinition(beanName);
 				}
 				// An implicitly scanned bean definition should not override an explicit import.
 				return;
-			}
-			else {
+			} else {
 				// Explicit bean definition found, probably replacing an import.
 				// Let's remove the old one and go with the new one.
 				this.configurationClasses.remove(configClass);
@@ -300,9 +293,7 @@ class ConfigurationClassParser {
 	 * @param sourceClass a source class
 	 * @return the superclass, or {@code null} if none found or previously processed
 	 */
-	protected final @Nullable SourceClass doProcessConfigurationClass(
-			ConfigurationClass configClass, SourceClass sourceClass, Predicate<String> filter)
-			throws IOException {
+	protected final @Nullable SourceClass doProcessConfigurationClass(ConfigurationClass configClass, SourceClass sourceClass, Predicate<String> filter) throws IOException {
 
 		if (configClass.getMetadata().isAnnotated(Component.class.getName())) {
 			// Recursively process any member (nested) classes first
@@ -310,41 +301,33 @@ class ConfigurationClassParser {
 		}
 
 		// Process any @PropertySource annotations
-		for (AnnotationAttributes propertySource : AnnotationConfigUtils.attributesForRepeatable(
-				sourceClass.getMetadata(), org.springframework.context.annotation.PropertySource.class,
-				PropertySources.class, true)) {
+		for (AnnotationAttributes propertySource : AnnotationConfigUtils.attributesForRepeatable(sourceClass.getMetadata(), org.springframework.context.annotation.PropertySource.class, PropertySources.class, true)) {
 			if (this.propertySourceRegistry != null) {
 				this.propertySourceRegistry.processPropertySource(propertySource);
-			}
-			else {
-				logger.info("Ignoring @PropertySource annotation on [" + sourceClass.getMetadata().getClassName() +
-						"]. Reason: Environment must implement ConfigurableEnvironment");
+			} else {
+				logger.info("Ignoring @PropertySource annotation on [" + sourceClass.getMetadata().getClassName() + "]. Reason: Environment must implement ConfigurableEnvironment");
 			}
 		}
 
 		// 【扫描@ComponentScan注解】首先搜索直接声明的@ComponentScan注解
-		Set<AnnotationAttributes> componentScans = AnnotationConfigUtils.attributesForRepeatable(
-				sourceClass.getMetadata(), ComponentScan.class, ComponentScans.class,
-				MergedAnnotation::isDirectlyPresent);
+		Set<AnnotationAttributes> componentScans = AnnotationConfigUtils.attributesForRepeatable(sourceClass.getMetadata(), ComponentScan.class, ComponentScans.class, MergedAnnotation::isDirectlyPresent);
 
 		// Fall back to searching for @ComponentScan meta-annotations (which indirectly
 		// includes locally declared composed annotations).
 		if (componentScans.isEmpty()) {
-			componentScans = AnnotationConfigUtils.attributesForRepeatable(sourceClass.getMetadata(),
-					ComponentScan.class, ComponentScans.class, MergedAnnotation::isMetaPresent);
+			componentScans = AnnotationConfigUtils.attributesForRepeatable(sourceClass.getMetadata(), ComponentScan.class, ComponentScans.class, MergedAnnotation::isMetaPresent);
 		}
 
 		if (!componentScans.isEmpty()) {
 			List<Condition> registerBeanConditions = collectRegisterBeanConditions(configClass);
 			if (!registerBeanConditions.isEmpty()) {
-				throw new ApplicationContextException(
-						"Component scan for configuration class [%s] could not be used with conditions in REGISTER_BEAN phase: %s"
-								.formatted(configClass.getMetadata().getClassName(), registerBeanConditions));
+				throw new ApplicationContextException("Component scan for configuration class [%s] could not be used with conditions in REGISTER_BEAN phase: %s".formatted(configClass.getMetadata().getClassName(), registerBeanConditions));
 			}
 			for (AnnotationAttributes componentScan : componentScans) {
+
 				// 【执行组件扫描】扫描指定包路径下的所有组件类（@Component、@Service、@Repository等）
-				Set<BeanDefinitionHolder> scannedBeanDefinitions =
-						this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
+				Set<BeanDefinitionHolder> scannedBeanDefinitions = this.componentScanParser.parse(componentScan, sourceClass.getMetadata().getClassName());
+
 				// 【递归解析配置类】检查扫描到的Bean定义中是否包含其他配置类，如果有则递归解析
 				for (BeanDefinitionHolder holder : scannedBeanDefinitions) {
 					BeanDefinition bdCand = holder.getBeanDefinition().getOriginatingBeanDefinition();
@@ -405,29 +388,27 @@ class ConfigurationClassParser {
 	/**
 	 * Register member (nested) classes that happen to be configuration classes themselves.
 	 */
-	private void processMemberClasses(ConfigurationClass configClass, SourceClass sourceClass,
-			Predicate<String> filter) throws IOException {
+	private void processMemberClasses(ConfigurationClass configClass, SourceClass sourceClass, Predicate<String> filter) throws IOException {
 
 		Collection<SourceClass> memberClasses = sourceClass.getMemberClasses();
 		if (!memberClasses.isEmpty()) {
+
 			List<SourceClass> candidates = new ArrayList<>(memberClasses.size());
 			for (SourceClass memberClass : memberClasses) {
-				if (ConfigurationClassUtils.isConfigurationCandidate(memberClass.getMetadata()) &&
-						!memberClass.getMetadata().getClassName().equals(configClass.getMetadata().getClassName())) {
+				if (ConfigurationClassUtils.isConfigurationCandidate(memberClass.getMetadata()) && !memberClass.getMetadata().getClassName().equals(configClass.getMetadata().getClassName())) {
 					candidates.add(memberClass);
 				}
 			}
+
 			OrderComparator.sort(candidates);
 			for (SourceClass candidate : candidates) {
 				if (this.importStack.contains(configClass)) {
 					this.problemReporter.error(new CircularImportProblem(configClass, this.importStack));
-				}
-				else {
+				} else {
 					this.importStack.push(configClass);
 					try {
 						processConfigurationClass(candidate.asConfigClass(configClass), filter);
-					}
-					finally {
+					} finally {
 						this.importStack.pop();
 					}
 				}

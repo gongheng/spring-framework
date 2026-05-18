@@ -1255,8 +1255,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 	//---------------------------------------------------------------------
 
 	@Override
-	public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
-			throws BeanDefinitionStoreException {
+	public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition) throws BeanDefinitionStoreException {
 
 		Assert.hasText(beanName, "Bean name must not be empty");
 		Assert.notNull(beanDefinition, "BeanDefinition must not be null");
@@ -1275,21 +1274,18 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 		if (existingDefinition != null) {
 			if (!isBeanDefinitionOverridable(beanName)) {
 				throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
-			}
-			else {
+			} else {
 				logBeanDefinitionOverriding(beanName, beanDefinition, existingDefinition);
 			}
 			this.beanDefinitionMap.put(beanName, beanDefinition);
-		}
-		else {
+		} else {
 			if (isAlias(beanName)) {
 				String aliasedName = canonicalName(beanName);
 				if (!isBeanDefinitionOverridable(aliasedName)) {
 					if (containsBeanDefinition(aliasedName)) {  // alias for existing bean definition
 						throw new BeanDefinitionOverrideException(
 								beanName, beanDefinition, getBeanDefinition(aliasedName));
-					}
-					else {  // alias pointing to non-existing bean definition
+					} else {  // alias pointing to non-existing bean definition
 						throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName,
 								"Cannot register bean definition for bean '" + beanName +
 								"' since there is already an alias for bean '" + aliasedName + "' bound.");
@@ -1297,13 +1293,12 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				}
 				else {
 					if (logger.isInfoEnabled()) {
-						logger.info("Removing alias '" + beanName + "' for bean '" + aliasedName +
-								"' due to registration of bean definition for bean '" + beanName + "': [" +
-								beanDefinition + "]");
+						logger.info("Removing alias '" + beanName + "' for bean '" + aliasedName + "' due to registration of bean definition for bean '" + beanName + "': [" + beanDefinition + "]");
 					}
 					removeAlias(beanName);
 				}
 			}
+
 			if (hasBeanCreationStarted()) {
 				// Cannot modify startup-time collection elements anymore (for stable iteration)
 				synchronized (this.beanDefinitionMap) {
@@ -1314,8 +1309,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 					this.beanDefinitionNames = updatedDefinitions;
 					removeManualSingletonName(beanName);
 				}
-			}
-			else {
+			} else {
 				// Still in startup registration phase
 				this.beanDefinitionMap.put(beanName, beanDefinition);
 				this.beanDefinitionNames.add(beanName);
@@ -1326,8 +1320,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 
 		if (existingDefinition != null || containsSingleton(beanName)) {
 			resetBeanDefinition(beanName);
-		}
-		else if (isConfigurationFrozen()) {
+		} else if (isConfigurationFrozen()) {
 			clearByTypeCache();
 		}
 
@@ -1394,8 +1387,7 @@ public class DefaultListableBeanFactory extends AbstractAutowireCapableBeanFacto
 				updatedDefinitions.remove(beanName);
 				this.beanDefinitionNames = updatedDefinitions;
 			}
-		}
-		else {
+		} else {
 			// Still in startup registration phase
 			this.beanDefinitionNames.remove(beanName);
 		}

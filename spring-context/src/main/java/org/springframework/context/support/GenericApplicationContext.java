@@ -290,6 +290,45 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 	/**
 	 * Do nothing: We hold a single internal BeanFactory and rely on callers
 	 * to register beans through our public methods (or the BeanFactory's).
+	 *
+	 * <p><b>SpringBoot容器的refreshBeanFactory实现：</b>
+	 * <pre>
+	 * 调用时机：
+	 * AbstractApplicationContext.obtainFreshBeanFactory() [第721行]
+	 *   ↓
+	 * GenericApplicationContext.refreshBeanFactory() [本方法，第296行]
+	 *
+	 * 实现说明：
+	 * 1. ✅ 只设置序列化ID（不重新创建BeanFactory）
+	 *    this.beanFactory.setSerializationId(getId());
+	 *
+	 * 2. ✅ 防止多次刷新（使用CAS操作）
+	 *    if (!this.refreshed.compareAndSet(false, true)) {
+	 *        throw new IllegalStateException("...");
+	 *    }
+	 *
+	 * 3. ❌ 不重新创建BeanFactory
+	 *    - BeanFactory在构造函数中就已创建（第129行）
+	 *    - this.beanFactory = new DefaultListableBeanFactory();
+	 *
+	 * 为什么不重新创建BeanFactory？
+	 * - SpringBoot使用编程式配置（注解、自动配置）
+	 * - Bean定义通过ConfigurationClassPostProcessor在refresh()过程中注册
+	 * - 不需要像XML配置那样在refresh时重新加载资源文件
+	 * - 性能更优（避免不必要的创建和销毁开销）
+	 *
+	 * 对比AbstractRefreshableApplicationContext：
+	 * - 后者在refresh()时会销毁旧的BeanFactory并创建新的
+	 * - 适合需要运行时重新加载配置的场景
+	 * - 适用于XML等外部资源配置
+	 *
+	 * 使用场景：
+	 * ✅ SpringBoot应用（推荐）
+	 * ✅ 注解驱动的Spring应用
+	 * ✅ 编程式配置的应用
+	 * ❌ 需要运行时刷新配置的应用（应使用AbstractRefreshableApplicationContext）
+	 * </pre>
+	 *
 	 * @see #registerBeanDefinition
 	 */
 	@Override

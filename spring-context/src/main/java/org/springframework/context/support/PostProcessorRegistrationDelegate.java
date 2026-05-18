@@ -79,8 +79,7 @@ final class PostProcessorRegistrationDelegate {
 	 * 
 	 * 【重要】ConfigurationClassPostProcessor就是在这里被调用，它负责处理所有@Configuration类
 	 */
-	public static void invokeBeanFactoryPostProcessors(
-			ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
+	public static void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
 
 		// WARNING: Although it may appear that the body of this method can be easily
 		// refactored to avoid the use of multiple loops and multiple lists, the use

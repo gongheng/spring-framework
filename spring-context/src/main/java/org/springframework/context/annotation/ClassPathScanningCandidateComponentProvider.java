@@ -313,8 +313,7 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 		if (this.componentsIndex != null && indexSupportsIncludeFilters()) {
 			if (this.componentsIndex.hasScannedPackage(basePackage)) {
 				return addCandidateComponentsFromIndex(this.componentsIndex, basePackage);
-			}
-			else {
+			} else {
 				this.componentsIndex.registerScan(basePackage);
 			}
 		}
@@ -443,11 +442,56 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 		return candidates;
 	}
 
+	/**
+	 * 🎯【Bean定义加载的最底层方法】扫描指定包路径下的所有候选组件
+	 *
+	 * <p>这个方法真正执行classpath扫描，查找所有符合条件的.class文件并创建BeanDefinition。
+	 *
+	 * <p><b>调用链路：</b>
+	 * <pre>
+	 * invokeBeanFactoryPostProcessors(beanFactory) 【AbstractApplicationContext:604】
+	 *   ↓
+	 * ConfigurationClassPostProcessor.processConfigBeanDefinitions() 【:389】
+	 *   ↓
+	 * ConfigurationClassParser.parse() 【:168】
+	 *   ↓
+	 * doProcessConfigurationClass() 【:303】
+	 *   ↓
+	 * ComponentScanAnnotationParser.parse() 【:68】
+	 *   ↓
+	 * ClassPathBeanDefinitionScanner.doScan() 【:275】
+	 *   ↓
+	 * findCandidateComponents(basePackage) 【:279】
+	 *   ↓
+	 * scanCandidateComponents(basePackage) 【本方法】
+	 * </pre>
+	 *
+	 * <p><b>核心逻辑：</b>
+	 * <ol>
+	 * <li>构建扫描路径：classpath*:com/example/todo/xx/x.class</li>
+	 * <li>获取所有.class文件资源</li>
+	 * <li>使用ASM技术读取类元数据（不加载类）</li>
+	 * <li>检查是否有@Component、@Service等注解</li>
+	 * <li>为符合条件的类创建ScannedGenericBeanDefinition</li>
+	 * </ol>
+	 *
+	 * <p><b>为什么使用ASM技术？</b>
+	 * <ul>
+	 * <li>不需要加载类到JVM，性能更好</li>
+	 * <li>避免类的静态初始化块被执行</li>
+	 * <li>可以读取类的注解信息</li>
+	 * </ul>
+	 *
+	 * @param basePackage the package to scan (e.g., "com.example.todo")
+	 * @return a Set of BeanDefinitions for candidate components
+	 */
 	private Set<BeanDefinition> scanCandidateComponents(String basePackage) {
 		Set<BeanDefinition> candidates = new LinkedHashSet<>();
 		try {
-			String packageSearchPattern = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX +
-					resolveBasePackage(basePackage) + '/' + this.resourcePattern;
+			// 1. 构建扫描路径：classpath*:com/example/todo/**/*.class
+			String packageSearchPattern = ResourcePatternResolver.CLASSPATH_ALL_URL_PREFIX + resolveBasePackage(basePackage) + '/' + this.resourcePattern;
+
+			// 2. 获取所有.class文件资源
 			Resource[] resources = getResourcePatternResolver().getResources(packageSearchPattern);
 			boolean traceEnabled = logger.isTraceEnabled();
 			boolean debugEnabled = logger.isDebugEnabled();
@@ -457,27 +501,30 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 					// Ignore CGLIB-generated classes in the classpath
 					continue;
 				}
+
 				if (traceEnabled) {
 					logger.trace("Scanning " + resource);
 				}
+
 				try {
 					MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
 					if (isCandidateComponent(metadataReader)) {
+
 						ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
 						sbd.setSource(resource);
+
+
 						if (isCandidateComponent(sbd)) {
 							if (debugEnabled) {
 								logger.debug("Identified candidate component class: " + resource);
 							}
 							candidates.add(sbd);
-						}
-						else {
+						} else {
 							if (debugEnabled) {
 								logger.debug("Ignored because not a concrete top-level class: " + resource);
 							}
 						}
-					}
-					else {
+					} else {
 						if (traceEnabled) {
 							logger.trace("Ignored because not matching any filter: " + resource);
 						}
@@ -493,11 +540,8 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 						if (debugEnabled) {
 							logger.debug("Ignored incompatible class format in " + resource + ": " + ex.getMessage());
 						}
-					}
-					else {
-						throw new BeanDefinitionStoreException("Incompatible class format in " + resource +
-								": set system property 'spring.classformat.ignore' to 'true' " +
-								"if you mean to ignore such files during classpath scanning", ex);
+					} else {
+						throw new BeanDefinitionStoreException("Incompatible class format in " + resource + ": set system property 'spring.classformat.ignore' to 'true' " + "if you mean to ignore such files during classpath scanning", ex);
 					}
 				}
 				catch (Throwable ex) {
