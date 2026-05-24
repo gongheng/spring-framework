@@ -528,8 +528,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 		return (Class<?>) buildProxy(beanClass, beanName, specificInterceptors, targetSource, true);
 	}
 
-	private Object buildProxy(Class<?> beanClass, @Nullable String beanName,
-			Object @Nullable [] specificInterceptors, TargetSource targetSource, boolean classOnly) {
+	private Object buildProxy(Class<?> beanClass, @Nullable String beanName, Object @Nullable [] specificInterceptors, TargetSource targetSource, boolean classOnly) {
 
 		if (this.beanFactory instanceof ConfigurableListableBeanFactory clbf) {
 			AutoProxyUtils.exposeTargetClass(clbf, beanName, beanClass);
@@ -543,8 +542,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 			proxyFactory.setProxyTargetClass(true);
 		}
 		else {
-			Class<?>[] ifcs = (this.beanFactory instanceof ConfigurableListableBeanFactory clbf ?
-					AutoProxyUtils.determineExposedInterfaces(clbf, beanName) : null);
+			Class<?>[] ifcs = (this.beanFactory instanceof ConfigurableListableBeanFactory clbf ? AutoProxyUtils.determineExposedInterfaces(clbf, beanName) : null);
 			if (ifcs != null) {
 				proxyFactory.setProxyTargetClass(false);
 				for (Class<?> ifc : ifcs) {

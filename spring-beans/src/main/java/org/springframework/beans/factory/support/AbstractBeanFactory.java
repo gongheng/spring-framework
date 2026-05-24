@@ -246,9 +246,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 * @throws BeansException if the bean could not be created
 	 */
 	@SuppressWarnings("unchecked")
-	protected <T> T doGetBean(
-			String name, @Nullable Class<T> requiredType, @Nullable Object @Nullable [] args, boolean typeCheckOnly)
-			throws BeansException {
+	protected <T> T doGetBean(String name, @Nullable Class<T> requiredType, @Nullable Object @Nullable [] args, boolean typeCheckOnly) throws BeansException {
 
 		String beanName = transformedBeanName(name);
 		Object beanInstance;
@@ -258,17 +256,14 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		if (sharedInstance != null && args == null) {
 			if (logger.isTraceEnabled()) {
 				if (isSingletonCurrentlyInCreation(beanName)) {
-					logger.trace("Returning eagerly cached instance of singleton bean '" + beanName +
-							"' that is not fully initialized yet - a consequence of a circular reference");
-				}
-				else {
+					logger.trace("Returning eagerly cached instance of singleton bean '" + beanName + "' that is not fully initialized yet - a consequence of a circular reference");
+				} else {
 					logger.trace("Returning cached instance of singleton bean '" + beanName + "'");
 				}
 			}
 			beanInstance = getObjectForBeanInstance(sharedInstance, requiredType, name, beanName, null);
-		}
+		} else {
 
-		else {
 			// Fail if we're already creating this bean instance:
 			// We're assumably within a circular reference.
 			if (isPrototypeCurrentlyInCreation(beanName)) {
@@ -282,16 +277,13 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				String nameToLookup = originalBeanName(name);
 				if (parentBeanFactory instanceof AbstractBeanFactory abf) {
 					return abf.doGetBean(nameToLookup, requiredType, args, typeCheckOnly);
-				}
-				else if (args != null) {
+				} else if (args != null) {
 					// Delegation to parent with explicit args.
 					return (T) parentBeanFactory.getBean(nameToLookup, args);
-				}
-				else if (requiredType != null) {
+				} else if (requiredType != null) {
 					// No args -> delegate to standard getBean method.
 					return parentBeanFactory.getBean(nameToLookup, requiredType);
-				}
-				else {
+				} else {
 					return (T) parentBeanFactory.getBean(nameToLookup);
 				}
 			}
@@ -300,39 +292,35 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				markBeanAsCreated(beanName);
 			}
 
-			StartupStep beanCreation = this.applicationStartup.start("spring.beans.instantiate")
-					.tag("beanName", name);
+			StartupStep beanCreation = this.applicationStartup.start("spring.beans.instantiate").tag("beanName", name);
 			try {
+
 				if (requiredType != null) {
 					beanCreation.tag("beanType", requiredType::toString);
 				}
+
 				RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
 				checkMergedBeanDefinition(mbd, beanName, args);
 
 				// Guarantee initialization of beans that the current bean depends on.
 				String[] dependsOn = mbd.getDependsOn();
 				if (dependsOn != null) {
+
 					for (String dep : dependsOn) {
 						if (isDependent(beanName, dep)) {
-							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
-									"Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
+							throw new BeanCreationException(mbd.getResourceDescription(), beanName, "Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
 						}
 						registerDependentBean(dep, beanName);
 						try {
 							getBean(dep);
-						}
-						catch (NoSuchBeanDefinitionException ex) {
+						} catch (NoSuchBeanDefinitionException ex) {
 							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
 									"'" + beanName + "' depends on missing bean '" + dep + "'", ex);
-						}
-						catch (BeanCreationException ex) {
+						} catch (BeanCreationException ex) {
 							if (requiredType != null) {
 								// Wrap exception with current bean metadata but only if specifically
 								// requested (indicated by required type), not for depends-on cascades.
-								throw new BeanCreationException(mbd.getResourceDescription(), beanName,
-										"Failed to initialize dependency '" + ex.getBeanName() + "' of " +
-												requiredType.getSimpleName() + " bean '" + beanName + "': " +
-												ex.getMessage(), ex);
+								throw new BeanCreationException(mbd.getResourceDescription(), beanName, "Failed to initialize dependency '" + ex.getBeanName() + "' of " + requiredType.getSimpleName() + " bean '" + beanName + "': " + ex.getMessage(), ex);
 							}
 							throw ex;
 						}
@@ -344,8 +332,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					sharedInstance = getSingleton(beanName, () -> {
 						try {
 							return createBean(beanName, mbd, args);
-						}
-						catch (BeansException ex) {
+						} catch (BeansException ex) {
 							// Explicitly remove instance from singleton cache: It might have been put there
 							// eagerly by the creation process, to allow for circular reference resolution.
 							// Also remove any beans that received a temporary reference to the bean.
@@ -1567,8 +1554,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 * @return the resolved bean class (or {@code null} if none)
 	 * @throws CannotLoadBeanClassException if we failed to load the class
 	 */
-	protected @Nullable Class<?> resolveBeanClass(RootBeanDefinition mbd, String beanName, Class<?>... typesToMatch)
-			throws CannotLoadBeanClassException {
+	protected @Nullable Class<?> resolveBeanClass(RootBeanDefinition mbd, String beanName, Class<?>... typesToMatch) throws CannotLoadBeanClassException {
 
 		try {
 			if (mbd.hasBeanClass()) {

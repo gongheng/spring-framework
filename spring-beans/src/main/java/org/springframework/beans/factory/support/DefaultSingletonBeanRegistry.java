@@ -244,15 +244,18 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 		// 【第二步：检查二级缓存】如果一级缓存没有且Bean正在创建中，检查二级缓存
 		// isSingletonCurrentlyInCreation()是循环依赖检测的关键
 		if (singletonObject == null && isSingletonCurrentlyInCreation(beanName)) {
+
 			singletonObject = this.earlySingletonObjects.get(beanName);
 
 			// 【第三步：检查三级缓存】如果二级缓存也没有且允许早期引用，检查三级缓存
 			// 这里是解决循环依赖的核心：通过ObjectFactory获取早期Bean引用
 			if (singletonObject == null && allowEarlyReference) {
+
 				if (!this.singletonLock.tryLock()) {
 					// Avoid early singleton inference outside of original creation thread.
 					return null;
 				}
+
 				try {
 					// Consistent creation of early reference within full singleton lock.
 					singletonObject = this.singletonObjects.get(beanName);
@@ -265,15 +268,13 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 								// Singleton could have been added or removed in the meantime.
 								if (this.singletonFactories.remove(beanName) != null) {
 									this.earlySingletonObjects.put(beanName, singletonObject);
-								}
-								else {
+								} else {
 									singletonObject = this.singletonObjects.get(beanName);
 								}
 							}
 						}
 					}
-				}
-				finally {
+				} finally {
 					this.singletonLock.unlock();
 				}
 			}

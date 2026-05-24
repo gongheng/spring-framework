@@ -508,11 +508,11 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 
 				try {
 					MetadataReader metadataReader = getMetadataReaderFactory().getMetadataReader(resource);
+
 					if (isCandidateComponent(metadataReader)) {
 
 						ScannedGenericBeanDefinition sbd = new ScannedGenericBeanDefinition(metadataReader);
 						sbd.setSource(resource);
-
 
 						if (isCandidateComponent(sbd)) {
 							if (debugEnabled) {
@@ -529,13 +529,11 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 							logger.trace("Ignored because not matching any filter: " + resource);
 						}
 					}
-				}
-				catch (FileNotFoundException ex) {
+				} catch (FileNotFoundException ex) {
 					if (traceEnabled) {
 						logger.trace("Ignored non-readable " + resource + ": " + ex.getMessage());
 					}
-				}
-				catch (ClassFormatException ex) {
+				} catch (ClassFormatException ex) {
 					if (shouldIgnoreClassFormatException) {
 						if (debugEnabled) {
 							logger.debug("Ignored incompatible class format in " + resource + ": " + ex.getMessage());
@@ -543,8 +541,7 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 					} else {
 						throw new BeanDefinitionStoreException("Incompatible class format in " + resource + ": set system property 'spring.classformat.ignore' to 'true' " + "if you mean to ignore such files during classpath scanning", ex);
 					}
-				}
-				catch (Throwable ex) {
+				} catch (Throwable ex) {
 					throw new BeanDefinitionStoreException("Failed to read candidate component class: " + resource, ex);
 				}
 			}
@@ -597,8 +594,7 @@ public class ClassPathScanningCandidateComponentProvider implements EnvironmentC
 	 */
 	private boolean isConditionMatch(MetadataReader metadataReader) {
 		if (this.conditionEvaluator == null) {
-			this.conditionEvaluator =
-					new ConditionEvaluator(getRegistry(), this.environment, this.resourcePatternResolver);
+			this.conditionEvaluator = new ConditionEvaluator(getRegistry(), this.environment, this.resourcePatternResolver);
 		}
 		return !this.conditionEvaluator.shouldSkip(metadataReader.getAnnotationMetadata());
 	}

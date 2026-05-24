@@ -156,11 +156,9 @@ class ConfigurationClassParser {
 		this.problemReporter = problemReporter;
 		this.environment = environment;
 		this.resourceLoader = resourceLoader;
-		this.propertySourceRegistry = (this.environment instanceof ConfigurableEnvironment ce ?
-				new PropertySourceRegistry(new PropertySourceProcessor(ce, this.resourceLoader)) : null);
+		this.propertySourceRegistry = (this.environment instanceof ConfigurableEnvironment ce ? new PropertySourceRegistry(new PropertySourceProcessor(ce, this.resourceLoader)) : null);
 		this.registry = registry;
-		this.componentScanParser = new ComponentScanAnnotationParser(
-				environment, resourceLoader, componentScanBeanNameGenerator, registry);
+		this.componentScanParser = new ComponentScanAnnotationParser(environment, resourceLoader, componentScanBeanNameGenerator, registry);
 		this.conditionEvaluator = new ConditionEvaluator(registry, environment, resourceLoader);
 	}
 
@@ -323,6 +321,7 @@ class ConfigurationClassParser {
 			if (!registerBeanConditions.isEmpty()) {
 				throw new ApplicationContextException("Component scan for configuration class [%s] could not be used with conditions in REGISTER_BEAN phase: %s".formatted(configClass.getMetadata().getClassName(), registerBeanConditions));
 			}
+
 			for (AnnotationAttributes componentScan : componentScans) {
 
 				// 【执行组件扫描】扫描指定包路径下的所有组件类（@Component、@Service、@Repository等）

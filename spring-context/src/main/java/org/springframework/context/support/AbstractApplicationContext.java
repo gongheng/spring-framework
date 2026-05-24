@@ -862,8 +862,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
 		// (for example, through a @Bean method registered by ConfigurationClassPostProcessor)
-		if (!NativeDetector.inNativeImage() && beanFactory.getTempClassLoader() == null &&
-				beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+		if (!NativeDetector.inNativeImage() && beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
 			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
 			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
 		}
@@ -1016,17 +1015,13 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		beanFactory.prepareSingletonBootstrap();
 
 		// 【初始化引导执行器】如果容器中存在引导执行器Bean，则进行初始化
-		if (beanFactory.containsBean(BOOTSTRAP_EXECUTOR_BEAN_NAME) &&
-				beanFactory.isTypeMatch(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class)) {
-			beanFactory.setBootstrapExecutor(
-					beanFactory.getBean(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class));
+		if (beanFactory.containsBean(BOOTSTRAP_EXECUTOR_BEAN_NAME) && beanFactory.isTypeMatch(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class)) {
+			beanFactory.setBootstrapExecutor(beanFactory.getBean(BOOTSTRAP_EXECUTOR_BEAN_NAME, Executor.class));
 		}
 
 		// 【初始化类型转换服务】设置Spring的类型转换服务，用于属性编辑和类型转换
-		if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
-				beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
-			beanFactory.setConversionService(
-					beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
+		if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) && beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
+			beanFactory.setConversionService(beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
 		}
 
 		// 【注册嵌入式值解析器】如果没有自定义的值解析器，注册默认的占位符解析器
@@ -1048,11 +1043,9 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		for (String weaverAwareName : weaverAwareNames) {
 			try {
 				beanFactory.getBean(weaverAwareName, LoadTimeWeaverAware.class);
-			}
-			catch (BeanNotOfRequiredTypeException ex) {
+			} catch (BeanNotOfRequiredTypeException ex) {
 				if (logger.isDebugEnabled()) {
-					logger.debug("Failed to initialize LoadTimeWeaverAware bean '" + weaverAwareName +
-							"' due to unexpected type mismatch: " + ex.getMessage());
+					logger.debug("Failed to initialize LoadTimeWeaverAware bean '" + weaverAwareName + "' due to unexpected type mismatch: " + ex.getMessage());
 				}
 			}
 		}

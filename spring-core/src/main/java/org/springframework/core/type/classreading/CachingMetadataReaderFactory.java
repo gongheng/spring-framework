@@ -120,6 +120,7 @@ public class CachingMetadataReaderFactory extends AbstractMetadataReaderFactory 
 
 	@Override
 	public MetadataReader getMetadataReader(Resource resource) throws IOException {
+
 		if (this.metadataReaderCache instanceof ConcurrentMap) {
 			// No synchronization necessary...
 			MetadataReader metadataReader = this.metadataReaderCache.get(resource);
@@ -128,8 +129,7 @@ public class CachingMetadataReaderFactory extends AbstractMetadataReaderFactory 
 				this.metadataReaderCache.put(resource, metadataReader);
 			}
 			return metadataReader;
-		}
-		else if (this.metadataReaderCache != null) {
+		} else if (this.metadataReaderCache != null) {
 			synchronized (this.metadataReaderCache) {
 				MetadataReader metadataReader = this.metadataReaderCache.get(resource);
 				if (metadataReader == null) {
@@ -138,8 +138,7 @@ public class CachingMetadataReaderFactory extends AbstractMetadataReaderFactory 
 				}
 				return metadataReader;
 			}
-		}
-		else {
+		} else {
 			return this.delegate.getMetadataReader(resource);
 		}
 	}

@@ -84,8 +84,7 @@ class ConditionEvaluator {
 		}
 
 		if (phase == null) {
-			if (metadata instanceof AnnotationMetadata annotationMetadata &&
-					ConfigurationClassUtils.isConfigurationCandidate(annotationMetadata)) {
+			if (metadata instanceof AnnotationMetadata annotationMetadata && ConfigurationClassUtils.isConfigurationCandidate(annotationMetadata)) {
 				return shouldSkip(metadata, ConfigurationPhase.PARSE_CONFIGURATION);
 			}
 			return shouldSkip(metadata, ConfigurationPhase.REGISTER_BEAN);

@@ -304,12 +304,10 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 	public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
 		int registryId = System.identityHashCode(registry);
 		if (this.registriesPostProcessed.contains(registryId)) {
-			throw new IllegalStateException(
-					"postProcessBeanDefinitionRegistry already called on this post-processor against " + registry);
+			throw new IllegalStateException("postProcessBeanDefinitionRegistry already called on this post-processor against " + registry);
 		}
 		if (this.factoriesPostProcessed.contains(registryId)) {
-			throw new IllegalStateException(
-					"postProcessBeanFactory already called on this post-processor against " + registry);
+			throw new IllegalStateException("postProcessBeanFactory already called on this post-processor against " + registry);
 		}
 		this.registriesPostProcessed.add(registryId);
 
@@ -500,8 +498,7 @@ public class ConfigurationClassPostProcessor implements BeanDefinitionRegistryPo
 				if (logger.isDebugEnabled()) {
 					logger.debug("Bean definition has already been processed as a configuration class: " + beanDef);
 				}
-			}
-			else if (ConfigurationClassUtils.checkConfigurationClassCandidate(beanDef, this.metadataReaderFactory)) {
+			} else if (ConfigurationClassUtils.checkConfigurationClassCandidate(beanDef, this.metadataReaderFactory)) {
 				configCandidates.add(new BeanDefinitionHolder(beanDef, beanName));
 			}
 		}

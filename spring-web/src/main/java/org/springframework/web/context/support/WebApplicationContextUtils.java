@@ -177,8 +177,7 @@ public abstract class WebApplicationContextUtils {
 	 * @param beanFactory the BeanFactory to configure
 	 * @param sc the ServletContext that we're running within
 	 */
-	public static void registerWebApplicationScopes(ConfigurableListableBeanFactory beanFactory,
-			@Nullable ServletContext sc) {
+	public static void registerWebApplicationScopes(ConfigurableListableBeanFactory beanFactory, @Nullable ServletContext sc) {
 
 		beanFactory.registerScope(WebApplicationContext.SCOPE_REQUEST, new RequestScope());
 		beanFactory.registerScope(WebApplicationContext.SCOPE_SESSION, new SessionScope());
