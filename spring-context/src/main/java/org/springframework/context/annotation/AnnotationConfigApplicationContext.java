@@ -136,8 +136,7 @@ public class AnnotationConfigApplicationContext extends GenericApplicationContex
 	public void setBeanNameGenerator(BeanNameGenerator beanNameGenerator) {
 		this.reader.setBeanNameGenerator(beanNameGenerator);
 		this.scanner.setBeanNameGenerator(beanNameGenerator);
-		getBeanFactory().registerSingleton(
-				AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR, beanNameGenerator);
+		getBeanFactory().registerSingleton(AnnotationConfigUtils.CONFIGURATION_BEAN_NAME_GENERATOR, beanNameGenerator);
 	}
 
 	/**
@@ -168,8 +167,7 @@ public class AnnotationConfigApplicationContext extends GenericApplicationContex
 	@Override
 	public void register(Class<?>... componentClasses) {
 		Assert.notEmpty(componentClasses, "At least one component class must be specified");
-		StartupStep registerComponentClass = getApplicationStartup().start("spring.context.component-classes.register")
-				.tag("classes", () -> Arrays.toString(componentClasses));
+		StartupStep registerComponentClass = getApplicationStartup().start("spring.context.component-classes.register").tag("classes", () -> Arrays.toString(componentClasses));
 		this.reader.register(componentClasses);
 		registerComponentClass.end();
 	}
@@ -185,8 +183,7 @@ public class AnnotationConfigApplicationContext extends GenericApplicationContex
 	@Override
 	public void scan(String... basePackages) {
 		Assert.notEmpty(basePackages, "At least one base package must be specified");
-		StartupStep scanPackages = getApplicationStartup().start("spring.context.base-packages.scan")
-				.tag("packages", () -> Arrays.toString(basePackages));
+		StartupStep scanPackages = getApplicationStartup().start("spring.context.base-packages.scan").tag("packages", () -> Arrays.toString(basePackages));
 		this.scanner.scan(basePackages);
 		scanPackages.end();
 	}

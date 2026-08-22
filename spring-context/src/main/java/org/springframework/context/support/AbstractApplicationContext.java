@@ -142,8 +142,7 @@ import org.springframework.util.ReflectionUtils;
  * @see org.springframework.context.ApplicationListener
  * @see org.springframework.context.MessageSource
  */
-public abstract class AbstractApplicationContext extends DefaultResourceLoader
-		implements ConfigurableApplicationContext {
+public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {
 
 	/**
 	 * The name of the {@link MessageSource} bean in the context.
@@ -421,13 +420,11 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		if (event instanceof ApplicationEvent applEvent) {
 			applicationEvent = applEvent;
 			eventType = typeHint;
-		}
-		else {
+		} else {
 			ResolvableType payloadType = null;
 			if (typeHint != null && ApplicationEvent.class.isAssignableFrom(typeHint.toClass())) {
 				eventType = typeHint;
-			}
-			else {
+			} else {
 				payloadType = typeHint;
 			}
 			applicationEvent = new PayloadApplicationEvent<>(this, event, payloadType);
@@ -453,8 +450,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		if (this.parent != null) {
 			if (this.parent instanceof AbstractApplicationContext abstractApplicationContext) {
 				abstractApplicationContext.publishEvent(event, typeHint);
-			}
-			else {
+			} else {
 				this.parent.publishEvent(event);
 			}
 		}
@@ -467,8 +463,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	 */
 	ApplicationEventMulticaster getApplicationEventMulticaster() throws IllegalStateException {
 		if (this.applicationEventMulticaster == null) {
-			throw new IllegalStateException("ApplicationEventMulticaster not initialized - " +
-					"call 'refresh' before multicasting events via the context: " + this);
+			throw new IllegalStateException("ApplicationEventMulticaster not initialized - " + "call 'refresh' before multicasting events via the context: " + this);
 		}
 		return this.applicationEventMulticaster;
 	}
@@ -491,8 +486,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	 */
 	LifecycleProcessor getLifecycleProcessor() throws IllegalStateException {
 		if (this.lifecycleProcessor == null) {
-			throw new IllegalStateException("LifecycleProcessor not initialized - " +
-					"call 'refresh' before invoking lifecycle methods via the context: " + this);
+			throw new IllegalStateException("LifecycleProcessor not initialized - " + "call 'refresh' before invoking lifecycle methods via the context: " + this);
 		}
 		return this.lifecycleProcessor;
 	}
@@ -651,20 +645,16 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 				// 12. 完成刷新：发布容器刷新完成事件，启动生命周期Bean
 				finishRefresh();
-			}
-
-			catch (RuntimeException | Error ex) {
+			} catch (RuntimeException | Error ex) {
 				if (logger.isWarnEnabled()) {
-					logger.warn("Exception encountered during context initialization - " +
-							"cancelling refresh attempt: " + ex);
+					logger.warn("Exception encountered during context initialization - " + "cancelling refresh attempt: " + ex);
 				}
 
 				// Stop already started Lifecycle beans to avoid dangling resources.
 				if (this.lifecycleProcessor != null && this.lifecycleProcessor.isRunning()) {
 					try {
 						this.lifecycleProcessor.stop();
-					}
-					catch (Throwable ex2) {
+					} catch (Throwable ex2) {
 						logger.warn("Exception thrown from LifecycleProcessor on cancelled refresh", ex2);
 					}
 				}
@@ -677,13 +667,10 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 				// Propagate exception to caller.
 				throw ex;
-			}
-
-			finally {
+			} finally {
 				contextRefresh.end();
 			}
-		}
-		finally {
+		} finally {
 			this.startupShutdownThread = null;
 			this.startupShutdownLock.unlock();
 		}
@@ -887,8 +874,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		if (beanFactory.containsLocalBean(MESSAGE_SOURCE_BEAN_NAME)) {
 			this.messageSource = beanFactory.getBean(MESSAGE_SOURCE_BEAN_NAME, MessageSource.class);
 			// Make MessageSource aware of parent MessageSource.
-			if (this.parent != null && this.messageSource instanceof HierarchicalMessageSource hms &&
-					hms.getParentMessageSource() == null) {
+			if (this.parent != null && this.messageSource instanceof HierarchicalMessageSource hms && hms.getParentMessageSource() == null) {
 				// Only set parent context as parent MessageSource if no parent MessageSource
 				// registered already.
 				hms.setParentMessageSource(getInternalParentMessageSource());
@@ -896,8 +882,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			if (logger.isTraceEnabled()) {
 				logger.trace("Using MessageSource [" + this.messageSource + "]");
 			}
-		}
-		else {
+		} else {
 			// Use empty MessageSource to be able to accept getMessage calls.
 			DelegatingMessageSource dms = new DelegatingMessageSource();
 			dms.setParentMessageSource(getInternalParentMessageSource());
@@ -918,8 +903,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	protected void initApplicationEventMulticaster() {
 		ConfigurableListableBeanFactory beanFactory = getBeanFactory();
 		if (beanFactory.containsLocalBean(APPLICATION_EVENT_MULTICASTER_BEAN_NAME)) {
-			this.applicationEventMulticaster =
-					beanFactory.getBean(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, ApplicationEventMulticaster.class);
+			this.applicationEventMulticaster = beanFactory.getBean(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, ApplicationEventMulticaster.class);
 			if (logger.isTraceEnabled()) {
 				logger.trace("Using ApplicationEventMulticaster [" + this.applicationEventMulticaster + "]");
 			}
@@ -928,8 +912,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			this.applicationEventMulticaster = new SimpleApplicationEventMulticaster(beanFactory);
 			beanFactory.registerSingleton(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, this.applicationEventMulticaster);
 			if (logger.isTraceEnabled()) {
-				logger.trace("No '" + APPLICATION_EVENT_MULTICASTER_BEAN_NAME + "' bean, using " +
-						"[" + this.applicationEventMulticaster.getClass().getSimpleName() + "]");
+				logger.trace("No '" + APPLICATION_EVENT_MULTICASTER_BEAN_NAME + "' bean, using " + "[" + this.applicationEventMulticaster.getClass().getSimpleName() + "]");
 			}
 		}
 	}
@@ -955,8 +938,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			this.lifecycleProcessor = defaultProcessor;
 			beanFactory.registerSingleton(LIFECYCLE_PROCESSOR_BEAN_NAME, this.lifecycleProcessor);
 			if (logger.isTraceEnabled()) {
-				logger.trace("No '" + LIFECYCLE_PROCESSOR_BEAN_NAME + "' bean, using " +
-						"[" + this.lifecycleProcessor.getClass().getSimpleName() + "]");
+				logger.trace("No '" + LIFECYCLE_PROCESSOR_BEAN_NAME + "' bean, using " + "[" + this.lifecycleProcessor.getClass().getSimpleName() + "]");
 			}
 		}
 	}
@@ -1225,13 +1207,11 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			if (this.shutdownHook != null) {
 				try {
 					Runtime.getRuntime().removeShutdownHook(this.shutdownHook);
-				}
-				catch (IllegalStateException ex) {
+				} catch (IllegalStateException ex) {
 					// ignore - VM is already shutting down
 				}
 			}
-		}
-		finally {
+		} finally {
 			this.startupShutdownThread = null;
 			this.startupShutdownLock.unlock();
 		}
@@ -1256,8 +1236,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			try {
 				// Publish shutdown event.
 				publishEvent(new ContextClosedEvent(this));
-			}
-			catch (Throwable ex) {
+			} catch (Throwable ex) {
 				logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
 			}
 
@@ -1349,8 +1328,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		if (!this.active.get()) {
 			if (this.closed.get()) {
 				throw new IllegalStateException(getDisplayName() + " has been closed already");
-			}
-			else {
+			} else {
 				throw new IllegalStateException(getDisplayName() + " has not been refreshed yet");
 			}
 		}
@@ -1634,8 +1612,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	 * AbstractApplicationContext too; else, return the parent context itself.
 	 */
 	protected @Nullable MessageSource getInternalParentMessageSource() {
-		return (getParent() instanceof AbstractApplicationContext abstractApplicationContext ?
-				abstractApplicationContext.messageSource : getParent());
+		return (getParent() instanceof AbstractApplicationContext abstractApplicationContext ? abstractApplicationContext.messageSource : getParent());
 	}
 
 
